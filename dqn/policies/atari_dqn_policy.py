@@ -1,6 +1,6 @@
-from lib.policies.policy import Policy
-from lib.policies.e_greedy_linear_decay import EGreedyLinearDecay
-from lib.policies.e_greedy import EGreedy
+from dqn.policies.policy import Policy
+from dqn.policies.e_greedy_linear_decay import EGreedyLinearDecay
+from dqn.policies.e_greedy import EGreedy
 
 
 class AtariDQNPolicy(Policy):

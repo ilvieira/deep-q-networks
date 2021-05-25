@@ -14,7 +14,7 @@ from dqn.agents.networks.dqn import DQNetwork
 from dqn.agents.agent import Agent
 
 # TODO: allow the user to choose its own replay and add an AtariDQNAgent which automatically selects the atari replay
-from dqn.memory.dqn_replay_memory_atari import DQNReplayMemoryAtari as ReplayMemory
+from dqn.memory.dqn_replay_memory_atari import DQNReplayMemoryAtari
 from dqn.environments.atari_dqn_env import AtariDNQEnv
 from dqn.policies.atari_dqn_policy import AtariDQNPolicy
 from dqn.torch_extensions import clip_mse3
@@ -24,10 +24,10 @@ from dqn.policies.random_policy import RandomPolicy
 class DQNAgent(Agent):
     # TODO: check which attributes are actually necessary
     """ Class that simulates the game and trains the DQN """
-    def __init__(self, env, name, minibatch_size=32,
+    def __init__(self, env, name, replay, minibatch_size=32,
                  #replay_memory_size=1_000_000,
                  #replay_start_size=50_000,
-                 replay=ReplayMemory(1_000_000),
+
                  optimizer=torch.optim.RMSprop,
                  C=10_000,
                  gamma=0.99,
@@ -359,7 +359,6 @@ class DQNAgent(Agent):
 class DQNAtariAgent(DQNAgent):
     def __init__(self, env, name, minibatch_size=32,
                  replay_memory_size=1_000_000,
-                 replay_start_size=50_000,
                  C=10_000,
                  gamma=0.99,
                  hist_len=4,
@@ -372,10 +371,9 @@ class DQNAtariAgent(DQNAgent):
                  directory="Agents/",
                  seed=0,
                  device=torch.device("cuda" if torch.cuda.is_available() else "cpu")):
-        super().__init__(AtariDNQEnv(env), name,
+        replay = DQNReplayMemoryAtari(replay_memory_size)
+        super().__init__(AtariDNQEnv(env), name, replay,
                          minibatch_size=minibatch_size,
-                         replay_memory_size=replay_memory_size,
-                         replay_start_size=replay_start_size,
                          C=C,
                          gamma=gamma,
                          hist_len=hist_len,

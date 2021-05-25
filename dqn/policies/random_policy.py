@@ -1,4 +1,4 @@
-from lib.policies.policy import Policy
+from dqn.policies.policy import Policy
 import random as rnd
 
 

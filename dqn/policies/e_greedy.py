@@ -1,5 +1,5 @@
 from .policy import Policy
-from lib.policies.random_policy import RandomPolicy
+from dqn.policies.random_policy import RandomPolicy
 import random as rnd
 import numpy as np
 
