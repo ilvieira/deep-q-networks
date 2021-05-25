@@ -7,10 +7,11 @@ import time
 import matplotlib.pyplot as plt
 import pandas as pd
 
-
 from dqn.agents.networks.dqn import DQNetwork
 from dqn.agents.agent import Agent
-from dqn.memory.replay_memory import DQNReplayMemoryAtariV as ReplayMemory
+
+# TODO: allow the user to choose its own replay and add an AtariDQNAgent which automatically selects the atari replay
+from dqn.memory.dqn_replay_memory_atari import DQNReplayMemoryAtari as ReplayMemory
 from dqn.environments.atari_dqn_env import AtariDNQEnv
 from dqn.policies.atari_dqn_policy import AtariDQNPolicy
 from dqn.torch_extensions import clip_mse3
@@ -81,6 +82,7 @@ class DQNAgent(Agent):
         self._clip_value = 1
 
         # initialize the replay memory
+        # TODO: allow user to choose its own replay
         self.replay_memory = ReplayMemory(replay_memory_size)
         self.replay_start_size = replay_start_size
 

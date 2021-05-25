@@ -8,7 +8,7 @@ from dqn.memory.replay_memory import ReplayMemory
 from dqn.memory import compress_frames, decompress_as_np
 
 
-class DQNReplayMemoryAtariV(ReplayMemory):
+class DQNReplayMemoryAtari(ReplayMemory):
     def __init__(self, size, device=torch.device("cuda" if torch.cuda.is_available() else "cpu")):
         super().__init__(size)
         self._phi = deque(maxlen=size+4)
