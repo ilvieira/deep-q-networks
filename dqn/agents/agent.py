@@ -19,19 +19,20 @@ class Agent(ABC):
     def eval(self):
         self._training = False
 
-    def play(self):
+    def play(self, render=True):
         self.eval()
         observation = self.env.reset()
         done = False
-        begin = True
+        total_reward = 0
 
         while not done:
-            self.env.render()
-            # TODO: remove this line
-            at = 1 if begin else self.action(observation)
-            begin = False
+            if render:
+                self.env.render()
+            at = self.action(observation)
             observation, rt, done, _ = self.env.step(at)
+            total_reward += rt
         self.env.reset()
+        return total_reward
 
     @abstractmethod
     def action(self, observation):

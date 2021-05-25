@@ -28,6 +28,7 @@ class DQNAgent(Agent):
                  #replay_memory_size=1_000_000,
                  #replay_start_size=50_000,
                  replay=ReplayMemory(1_000_000),
+                 optimizer=torch.optim.RMSprop,
                  C=10_000,
                  gamma=0.99,
                  hist_len=4,
@@ -70,12 +71,10 @@ class DQNAgent(Agent):
         # other parameters
         self.gamma = gamma
         self.minibatch_size = minibatch_size
-        # TODO: leave as an option to the user
-        self.optimizer = torch.optim.RMSprop(self.Q.parameters(), lr=0.0025, alpha=0.95, eps=0.01)
+        self.optimizer = optimizer(self.Q.parameters(), lr=0.0025, alpha=0.95, eps=0.01)
         self._clip_value = 1
 
         # initialize the replay memory
-        # TODO: allow user to choose its own replay
         self.replay_memory = replay
 
         self.policy = policy
@@ -105,7 +104,6 @@ class DQNAgent(Agent):
         self.env.train()
         self.policy.train()
 
-    # TODO: see what can be reused from Agent
     def action(self, observation: np.ndarray):
         """Chooses an action given an observation"""
         phi = torch.tensor(self.expand_obs(observation)).float()
@@ -119,27 +117,10 @@ class DQNAgent(Agent):
             phi.cpu()
             return action
 
-    # TODO: see what can be reused from Agent
-    def play(self, render=True):
-        self.eval()
-        self.env.restart()
-        observation = self.env.reset()
-        done = False
-        total_reward = 0
-
-        while not done:
-            if render:
-                self.env.render()
-            at = self.action(observation)
-            observation, rt, done, _ = self.env.step(at)
-            total_reward += rt
-
-        self.env.reset()
-        return total_reward
-
     # ================================================================================================================
     # DQN Specific Methods
     # ================================================================================================================
+
     def populate_replay_memory(self, n_samples, verbose=True):
         """ Adds the first transitions to the replay memory by playing the game with random actions"""
         random_policy = RandomPolicy(self.n_actions)
@@ -266,9 +247,6 @@ class DQNAgent(Agent):
         loss.backward()
         self.optimizer.step()
 
-        # clear space in the gpu by deleting these tensors which have no more use:
-        del r, prev_phi, next_phi, not_done, y, q_vals, q_phi
-
     def play_and_store_transition(self, observation):
         at = self.action(observation)
         next_observation, rt, done, _ = self.env.step(at)
@@ -350,7 +328,8 @@ class DQNAgent(Agent):
             self.plot_results(stats, f"{self.agent_dir}{self.n_steps}_steps")
 
     @classmethod
-    def load(cls, env, name, directory="Agents/", import_replay=True, populate_replay=False):
+    def load(cls, env, name, directory="Agents/", import_replay=True, populate_replay=False,
+             optimizer=torch.optim.RMSprop):
         agent = DQNAgent(env, name, directory=directory, replay_start_size=0) \
             if (import_replay or not populate_replay) else DQNAgent(env, name, directory=directory)
 
@@ -362,11 +341,10 @@ class DQNAgent(Agent):
 
         agent.Q.load_state_dict(torch.load(agent_dir + "q_dict.pt"))
         agent.Q_target.load_state_dict(torch.load(agent_dir + "q_target_dict.pt"))
-        # TODO: is this necessary?
-        agent.optimizer.load_state_dict(torch.load(agent_dir + "optimizer.pt"))
+        # TODO: is this necessary? Commented until can tell the answer. Need further testing to make a decision
+        # agent.optimizer.load_state_dict(torch.load(agent_dir + "optimizer.pt"))
 
-        # TODO: allow user to choose optimizer
-        agent.optimizer = torch.optim.RMSprop(agent.Q.parameters(), lr=0.0025, alpha=0.95, eps=0.01)
+        agent.optimizer = optimizer(agent.Q.parameters(), lr=0.0025, alpha=0.95, eps=0.01)
         return agent
 
     # ================================================================================================================
@@ -412,3 +390,32 @@ class DQNAtariAgent(DQNAgent):
                          directory=directory,
                          seed=seed,
                          device=device)
+
+        def eval(self):
+            super().eval()
+            self.env.eval()
+            self.policy.eval()
+
+        def train(self):
+            super().train()
+            self.env.train()
+            self.policy.train()
+
+        # TODO: see what can be reused from Agent
+        def play(self, render=True):
+            self.eval()
+            self.env.restart()
+            observation = self.env.reset()
+            done = False
+            total_reward = 0
+
+            while not done:
+                if render:
+                    self.env.render()
+                at = self.action(observation)
+                observation, rt, done, _ = self.env.step(at)
+                total_reward += rt
+
+            self.env.reset()
+            return total_reward
+
