@@ -9,10 +9,8 @@ import pandas as pd
 
 
 from dqn.agents.networks.dqn import DQNetwork
-from dqn.agents.networks.linear_dqn import LinearDQN
-from dqn.policies.e_greedy_linear_decay import EGreedyLinearDecay
 from dqn.agents.agent import Agent
-from dqn.memory.replay_memory_opt import DQNReplayMemoryAtariV as ReplayMemory
+from dqn.memory.replay_memory import DQNReplayMemoryAtariV as ReplayMemory
 from dqn.environments.atari_dqn_env import AtariDNQEnv
 from dqn.policies.atari_dqn_policy import AtariDQNPolicy
 from dqn.torch_extensions import clip_mse3
