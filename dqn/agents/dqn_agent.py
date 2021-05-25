@@ -172,17 +172,14 @@ class DQNAgent(Agent):
         if verbose:
             print(f"Done - {time.time()-start}s")
 
-    def learn(self, store_stats=True, create_new=True):
-        """The algorithm as described in 'Human-level control through deep reinforcement learning'
+    def learn(self, store_stats=True, create_new=True, verbose=True):
+        """The algorithm as described in 'Human-level control through deep reinforcement learning'"""
 
-        NOTE: if self.feedback_after_episodes is an int n, the function will print feedback at each n episodes; if it is
-              None, no feedback will be given.
-        """
         if store_stats:
             if not os.path.exists(self.agent_dir):
                 os.makedirs(self.agent_dir)
 
-        if self.feedback_after_episodes is not None:
+        if verbose:
             print("Beginning the training stage...")
             start = time.time()
 
@@ -192,13 +189,15 @@ class DQNAgent(Agent):
         max_reward = float('-inf')
         points_per_episode = []
         frames_per_episode = []
-        self.save_stats(points_per_episode, frames_per_episode, create_new=create_new)
+
+        if store_stats:
+            self.save_stats(points_per_episode, frames_per_episode, create_new=create_new)
 
         for episode in range(self.max_episodes):
             ep_reward = 0
             ep_frames = 0
 
-            if self.feedback_after_episodes is not None:
+            if verbose:
                 if episode % self.feedback_after_episodes == 0 and not episode == 0:
                     print(f"... episode {episode} ... - {time.time()-start}")
                     print(f"  average reward: {total_reward / self.feedback_after_episodes}")
@@ -213,32 +212,32 @@ class DQNAgent(Agent):
 
             while not done:
                 self.n_steps += 1
-                at = self.action(observation)
-                next_observation, rt, done, _ = self.env.step(at)
-                transition = (self.expand_obs(observation), at, rt,
-                              self.expand_obs(next_observation), done)
-                observation = next_observation
-                self.replay_memory.append(transition)
-
-                total_reward += rt
-                ep_reward += rt
                 ep_frames += 1
 
+                observation, rt = self.play_and_store_transition(observation)
+                total_reward += rt
+                ep_reward += rt
+
+                # Backpropagation at each hist_len frames
                 if self.n_steps % self.hist_len == 0:
                     self.optimize_model()
 
+                # Update target network at each C frames
                 if self.n_steps % self.C == 0:
                     self.update_target()
 
+                # PERSISTENCE: Save after each save_after_steps_frame
                 if self.n_steps > 0 and self.n_steps % self.save_after_steps == 0:
                     stats_dir = self.save_stats(points_per_episode, frames_per_episode)
                     self.save(stats_dir=stats_dir)
                     points_per_episode = []
                     frames_per_episode = []
-                    print(f"Agent saved ({self.n_steps} steps)")
+                    if verbose:
+                        print(f"Agent saved ({self.n_steps} steps)")
 
+                # STOP if the maximum number of steps or time are reached
                 if self.n_steps > self.max_steps or time.time() - start > self.max_time:
-                    if self.feedback_after_episodes is not None:
+                    if verbose:
                         print("Done")
                     stats_dir = self.save_stats(points_per_episode, frames_per_episode)
                     self.save(stats_dir=stats_dir)
@@ -249,9 +248,11 @@ class DQNAgent(Agent):
             points_per_episode.append(ep_reward)
             frames_per_episode.append(ep_frames)
 
+        # TODO: this ending is definitely buggy. Only didn't notice because I don't usually use the number of episodes
+        #  to stop
         stats_dir = self.save_stats(points_per_episode, frames_per_episode)
         self.save(stats_dir=stats_dir)
-        if self.feedback_after_episodes is not None:
+        if verbose:
             print("Done")
 
     def optimize_model(self):
@@ -274,6 +275,13 @@ class DQNAgent(Agent):
 
         # clear space in the gpu by deleting these tensors which have no more use:
         del r, prev_phi, next_phi, not_done, y, q_vals, q_phi
+
+    def play_and_store_transition(self, observation):
+        at = self.action(observation)
+        next_observation, rt, done, _ = self.env.step(at)
+        transition = (self.expand_obs(observation), at, rt, self.expand_obs(next_observation), done)
+        self.replay_memory.append(transition)
+        return next_observation, rt
 
     def update_target(self):
         # TODO: allow the choice of net by the user. Probably a good idea to copy the class of Q
