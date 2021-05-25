@@ -1,4 +1,6 @@
-# TODO: all that files that create a DQNAgent should define its own environment
+# TODO: all that files that create a DQNAgent should define its own environment,
+#  also: directory
+#  also: populate replay
 
 import pickle
 import os
@@ -23,8 +25,9 @@ class DQNAgent(Agent):
     # TODO: check which attributes are actually necessary
     """ Class that simulates the game and trains the DQN """
     def __init__(self, env, name, minibatch_size=32,
-                 replay_memory_size=1_000_000,
-                 replay_start_size=50_000,
+                 #replay_memory_size=1_000_000,
+                 #replay_start_size=50_000,
+                 replay=ReplayMemory(1_000_000),
                  C=10_000,
                  gamma=0.99,
                  hist_len=4,
@@ -37,7 +40,6 @@ class DQNAgent(Agent):
                  frames_per_step=1,
                  save_after_steps=1_000_000,
                  directory="Agents/",
-                 plot_name="game",
                  seed=0,
                  device=torch.device("cuda" if torch.cuda.is_available() else "cpu")):
 
@@ -45,12 +47,7 @@ class DQNAgent(Agent):
 
         self.device = device
         self.set_seed(seed)
-
-        # TODO: probably should be given as a parameter from the user
-        self.agent_dir = os.getcwd() + '/' + directory + name + '/'
-
-        # TODO: probably should only be defined in the plot creation method
-        self._plot_name = plot_name
+        self.agent_dir = directory + name + '/'
 
         # TODO: redefine how the feedback is displayed
         self.feedback_after_episodes = feed_back_after_episodes
@@ -79,11 +76,7 @@ class DQNAgent(Agent):
 
         # initialize the replay memory
         # TODO: allow user to choose its own replay
-        self.replay_memory = ReplayMemory(replay_memory_size, device=self.device)
-        self.replay_start_size = replay_start_size
-
-        # TODO: this should not be in setup.
-        self.populate_replay_memory()
+        self.replay_memory = replay
 
         self.policy = policy
         self.loss = loss
@@ -147,7 +140,7 @@ class DQNAgent(Agent):
     # ================================================================================================================
     # DQN Specific Methods
     # ================================================================================================================
-    def populate_replay_memory(self, verbose=True):
+    def populate_replay_memory(self, n_samples, verbose=True):
         """ Adds the first transitions to the replay memory by playing the game with random actions"""
         random_policy = RandomPolicy(self.n_actions)
 
@@ -155,20 +148,23 @@ class DQNAgent(Agent):
             print("Populating the replay memory...")
             start = time.time()
 
-        while len(self.replay_memory) < self.replay_start_size:
+        transitions_added = 0
+        while transitions_added < n_samples:
             # restart the environment and get the first observation
             prev_phi = self.expand_obs(self.env.reset())
 
             # done becomes True whenever a terminal state is reached
             done = False
 
-            while (not done) and (len(self.replay_memory) < self.replay_start_size):
+            while (not done) and transitions_added < n_samples:
                 at = random_policy.choose_action()
                 phi, rt, done, _ = self.env.step(at)
                 phi = self.expand_obs(phi)
                 transition = (prev_phi, at, rt, phi, done)
                 self.replay_memory.append(transition)
+                transitions_added += 1
                 prev_phi = phi
+
         if verbose:
             print(f"Done - {time.time()-start}s")
 
@@ -211,10 +207,9 @@ class DQNAgent(Agent):
             done = False
 
             while not done:
+                observation, rt = self.play_and_store_transition(observation)
                 self.n_steps += 1
                 ep_frames += 1
-
-                observation, rt = self.play_and_store_transition(observation)
                 total_reward += rt
                 ep_reward += rt
 
@@ -228,7 +223,7 @@ class DQNAgent(Agent):
 
                 # PERSISTENCE: Save after each save_after_steps_frame
                 if self.n_steps > 0 and self.n_steps % self.save_after_steps == 0:
-                    stats_dir = self.save_stats(points_per_episode, frames_per_episode)
+                    stats_dir = self.save_stats(points_per_episode, frames_per_episode) if store_stats else None
                     self.save(stats_dir=stats_dir)
                     points_per_episode = []
                     frames_per_episode = []
@@ -239,7 +234,7 @@ class DQNAgent(Agent):
                 if self.n_steps > self.max_steps or time.time() - start > self.max_time:
                     if verbose:
                         print("Done")
-                    stats_dir = self.save_stats(points_per_episode, frames_per_episode)
+                    stats_dir = self.save_stats(points_per_episode, frames_per_episode) if store_stats else None
                     self.save(stats_dir=stats_dir)
                     return
 
@@ -248,9 +243,7 @@ class DQNAgent(Agent):
             points_per_episode.append(ep_reward)
             frames_per_episode.append(ep_frames)
 
-        # TODO: this ending is definitely buggy. Only didn't notice because I don't usually use the number of episodes
-        #  to stop
-        stats_dir = self.save_stats(points_per_episode, frames_per_episode)
+        stats_dir = self.save_stats(points_per_episode, frames_per_episode) if store_stats else None
         self.save(stats_dir=stats_dir)
         if verbose:
             print("Done")
@@ -287,10 +280,6 @@ class DQNAgent(Agent):
         # TODO: allow the choice of net by the user. Probably a good idea to copy the class of Q
         self.Q_target = DQNetwork(self.n_actions).to(self.device)
         self.Q_target.load_state_dict(self.Q.state_dict())
-
-    def q_vals(self, obs):
-        with torch.no_grad():
-            return self.Q(obs).detach().cpu()
 
     # ================================================================================================================
     # Statistics and Plot Methods
@@ -421,6 +410,5 @@ class DQNAtariAgent(DQNAgent):
                          feed_back_after_episodes=feed_back_after_episodes,
                          save_after_steps=save_after_steps,
                          directory=directory,
-                         plot_name=str(env),
                          seed=seed,
                          device=device)
