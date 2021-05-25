@@ -7,6 +7,7 @@ class RandomAgent(Agent):
     def __init__(self, env):
         super.__init__()
 
+    # TODO: implement action and see if there is a need to actually implement play here
     def play(self):
         self.env.reset()
 

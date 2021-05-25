@@ -3,25 +3,24 @@ import os
 import random as rnd
 import numpy as np
 import torch
-import torch.optim as optim
 import time
 import matplotlib.pyplot as plt
 import pandas as pd
 
 
-from lib.agents.networks.dqn import DQNetwork
-from lib.agents.networks.linear_dqn import LinearDQN
-from lib.policies.e_greedy_linear_decay import EGreedyLinearDecay
-from lib.agents.agent import Agent
-#from lib.memory.replay_memory_opt import DQNReplayMemoryAtari as ReplayMemory
-from lib.memory.replay_memory_opt import DQNReplayMemoryAtariV as ReplayMemory
-from lib.environments.atari_dqn_env import AtariDNQEnv
-from lib.policies.atari_dqn_policy import AtariDQNPolicy
-from lib.torch_extensions import clip_mse3
-from lib.policies.random_policy import RandomPolicy
+from dqn.agents.networks.dqn import DQNetwork
+from dqn.agents.networks.linear_dqn import LinearDQN
+from dqn.policies.e_greedy_linear_decay import EGreedyLinearDecay
+from dqn.agents.agent import Agent
+from dqn.memory.replay_memory_opt import DQNReplayMemoryAtariV as ReplayMemory
+from dqn.environments.atari_dqn_env import AtariDNQEnv
+from dqn.policies.atari_dqn_policy import AtariDQNPolicy
+from dqn.torch_extensions import clip_mse3
+from dqn.policies.random_policy import RandomPolicy
 
 
-class DQNAgentOpt(Agent):
+class DQNAgent(Agent):
+    # TODO: check which attributes are actually necessary
     """ Class that simulates the game and trains the DQN """
     def __init__(self, env, name, minibatch_size=32,
                  replay_memory_size=1_000_000,
@@ -44,118 +43,68 @@ class DQNAgentOpt(Agent):
 
         super().__init__(AtariDNQEnv(env) if atari else env)
 
+        # TODO: device should probably be decided in the __init__ input
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        self._set_seed(seed)
+
+        self.set_seed(seed)
+
+        # TODO: only the environment should be able to know if this is atari or not
         self._atari = atari
 
+        # TODO: probably should be given as a parameter from the user
         self.agent_dir = os.getcwd() + '/' + directory + name + '/'
 
+        # TODO: probably should only be defined in the plot creation method
         self._plot_name = plot_name if plot_name is not None else str(env) if atari else game_name
 
+        # TODO: redefine how the feedback is displayed
         self.feedback_after_episodes = feed_back_after_episodes
         self.save_after_steps = save_after_steps
         self.n_steps = 0
         self.hist_len = hist_len
+
         self.C = C
+
         self.max_steps = max_steps
         self.max_time = max_time
         self.max_episodes = max_episodes
         self.frames_per_step = 4 if atari else 1
 
         # initialize Q and Q_target as a copy of Q
-        self._initialize_network()
-        self._update_target()
+        # TODO: allow the choice of the net by the user
+        self.Q = DQNetwork(self.n_actions).to(self.device)
+        self.update_target()
 
         # other parameters
         self.gamma = gamma
         self.minibatch_size = minibatch_size
-        self.optimizer = optim.RMSprop(self.Q.parameters(), lr=0.0025, alpha=0.95, eps=0.01)
+        # TODO: leave as an option to the user
+        self.optimizer = torch.optim.RMSprop(self.Q.parameters(), lr=0.0025, alpha=0.95, eps=0.01)
         self._clip_value = 1
 
         # initialize the replay memory
         self.replay_memory = ReplayMemory(replay_memory_size)
         self.replay_start_size = replay_start_size
-        self._populate_replay_memory()
+
+        # TODO: this should not be in setup.
+        self.populate_replay_memory()
 
         self.policy = policy
         self.loss = loss
 
-    @staticmethod
-    def _screen_to_torch(screen: np.ndarray):
-        return np.expand_dims(screen.transpose((2, 0, 1)), axis=0)
+    # ================================================================================================================
+    # Setup Methods
+    # ================================================================================================================
 
     @staticmethod
-    def _set_seed(seed: int):
+    def set_seed(seed: int):
         torch.manual_seed(seed)
         rnd.seed(seed)
         np.random.seed(seed)
 
-    def _update_target(self):
-        self.Q_target = DQNetwork(self.n_actions).to(self.device)
-        self.Q_target.load_state_dict(self.Q.state_dict())
-
-    def _initialize_network(self):
-        self.Q = DQNetwork(self.n_actions).to(self.device)
-
-    def _get_results(self, values, mode="avg"):
-        """Mode should either be max or avg or simple"""
-        if mode == "simple":
-            return values, range(len(values)), "Points per episode"
-
-        func = max if mode =="max" else lambda x: sum(x)/len(x) if mode=="avg" else None
-        caption = f"Average points over the last {self.feedback_after_episodes} episodes" if mode == "avg" \
-            else f"Maximum points over the last {self.feedback_after_episodes} episodes" if mode == "max" else None
-        if func is None:
-            raise(ValueError("mode attribute should either be 'simple', 'max' or 'avg'."))
-
-        vals = []
-        for i in range(self.feedback_after_episodes, len(values)):
-            last_vals = values[i-self.feedback_after_episodes:i]
-            vals.append(func(last_vals))
-        return vals, range(self.feedback_after_episodes, len(values)), caption
-
-    def _plot_results(self, values, plot_dir, modes=None):
-        colors = ['b','r','g']
-        i = 0
-        if modes is None:
-            modes = ['avg', 'max']
-        fig, ax = plt.subplots()
-        for mode in modes:
-            y, x, caption = self._get_results(values, mode)
-            ax.plot(x, y, colors[i], label=caption)
-            i += 1
-
-        ax.set(xlabel="episodes", title="Performance of the Agent During the Learning Stage")
-        ax.legend()
-        fig.savefig(plot_dir + ".png")
-        plt.close()
-
-    def _populate_replay_memory(self, verbose=True):
-        """ Adds the first transitions to the replay memory by playing the game with random actions"""
-        random_policy = RandomPolicy(self.n_actions)
-
-        if verbose:
-            print("Populating the replay memory...")
-            start = time.time()
-
-        while len(self.replay_memory) < self.replay_start_size:
-            # restart the environment and get the first observation
-            prev_phi = self._screen_to_torch(self.env.reset())
-
-            # done becomes True whenever a terminal state is reached
-            done = False
-
-            while (not done) and (len(self.replay_memory) < self.replay_start_size):
-                at = random_policy.choose_action()
-                phi, rt, done, _ = self.env.step(at)
-                phi = self._screen_to_torch(phi)
-                transition = (prev_phi, at, rt, phi, done)
-                self.replay_memory.append(transition)
-
-                prev_phi = phi
-
-        if verbose:
-            print(f"Done - {time.time()-start}s")
+    # ================================================================================================================
+    # Agent Methods
+    # ================================================================================================================
 
     def eval(self):
         super().eval()
@@ -167,9 +116,10 @@ class DQNAgentOpt(Agent):
         self.env.train()
         self.policy.train()
 
+    # TODO: see what can be reused from Agent
     def action(self, observation: np.ndarray):
         """Chooses an action given an observation"""
-        phi = torch.tensor(self._screen_to_torch(observation)).float()
+        phi = torch.tensor(self.screen_to_torch(observation)).float()
 
         # phi is added to the gpu so that Q can make a prediction on it
         with torch.no_grad():
@@ -179,6 +129,52 @@ class DQNAgentOpt(Agent):
             # remove prev_phi from the gpu to clear vram
             phi.cpu()
             return action
+
+    # TODO: see what can be reused from Agent
+    def play(self, render=True):
+        self.eval()
+        self.env.restart()
+        observation = self.env.reset()
+        done = False
+        total_reward = 0
+
+        while not done:
+            if render:
+                self.env.render()
+            at = self.action(observation)
+            observation, rt, done, _ = self.env.step(at)
+            total_reward += rt
+
+        self.env.reset()
+        return total_reward
+
+    # ================================================================================================================
+    # DQN Specific Methods
+    # ================================================================================================================
+    def populate_replay_memory(self, verbose=True):
+        """ Adds the first transitions to the replay memory by playing the game with random actions"""
+        random_policy = RandomPolicy(self.n_actions)
+
+        if verbose:
+            print("Populating the replay memory...")
+            start = time.time()
+
+        while len(self.replay_memory) < self.replay_start_size:
+            # restart the environment and get the first observation
+            prev_phi = self.screen_to_torch(self.env.reset())
+
+            # done becomes True whenever a terminal state is reached
+            done = False
+
+            while (not done) and (len(self.replay_memory) < self.replay_start_size):
+                at = random_policy.choose_action()
+                phi, rt, done, _ = self.env.step(at)
+                phi = self.screen_to_torch(phi)
+                transition = (prev_phi, at, rt, phi, done)
+                self.replay_memory.append(transition)
+                prev_phi = phi
+        if verbose:
+            print(f"Done - {time.time()-start}s")
 
     def learn(self, store_stats=True, create_new=True):
         """The algorithm as described in 'Human-level control through deep reinforcement learning'
@@ -223,8 +219,8 @@ class DQNAgentOpt(Agent):
                 self.n_steps += 1
                 at = self.action(observation)
                 next_observation, rt, done, _ = self.env.step(at)
-                transition = (self._screen_to_torch(observation), at, rt,
-                              self._screen_to_torch(next_observation), done)
+                transition = (self.screen_to_torch(observation), at, rt,
+                              self.screen_to_torch(next_observation), done)
                 observation = next_observation
                 self.replay_memory.append(transition)
 
@@ -236,7 +232,7 @@ class DQNAgentOpt(Agent):
                     self.optimize_model()
 
                 if self.n_steps % self.C == 0:
-                    self._update_target()
+                    self.update_target()
 
                 if self.n_steps > 0 and self.n_steps % self.save_after_steps == 0:
                     stats_dir = self.save_stats(points_per_episode, frames_per_episode)
@@ -262,11 +258,8 @@ class DQNAgentOpt(Agent):
         if self.feedback_after_episodes is not None:
             print("Done")
 
-    def _sample_minibatch(self):
-        return self.replay_memory.sample(self.minibatch_size, device=self.device)
-
     def optimize_model(self):
-        r, prev_phi, next_phi, not_done, actions = self._sample_minibatch()
+        r, prev_phi, next_phi, not_done, actions = self.replay_memory.sample(self.minibatch_size, device=self.device)
 
         with torch.no_grad():
             y = (r + self.gamma * not_done * self.Q_target(next_phi)
@@ -286,6 +279,52 @@ class DQNAgentOpt(Agent):
         # clear space in the gpu by deleting these tensors which have no more use:
         del r, prev_phi, next_phi, not_done, y, q_vals, q_phi
 
+    def update_target(self):
+        # TODO: allow the choice of net by the user. Probably a good idea to copy the class of Q
+        self.Q_target = DQNetwork(self.n_actions).to(self.device)
+        self.Q_target.load_state_dict(self.Q.state_dict())
+
+    def q_vals(self, obs):
+        with torch.no_grad():
+            return self.Q(obs).detach().cpu()
+
+    # ================================================================================================================
+    # Statistics and Plot Methods
+    # ================================================================================================================
+
+    def get_results(self, values, mode="avg"):
+        """Mode should either be max or avg or simple"""
+        if mode == "simple":
+            return values, range(len(values)), "Points per episode"
+
+        func = max if mode =="max" else lambda x: sum(x)/len(x) if mode=="avg" else None
+        caption = f"Average points over the last {self.feedback_after_episodes} episodes" if mode == "avg" \
+            else f"Maximum points over the last {self.feedback_after_episodes} episodes" if mode == "max" else None
+        if func is None:
+            raise(ValueError("mode attribute should either be 'simple', 'max' or 'avg'."))
+
+        vals = []
+        for i in range(self.feedback_after_episodes, len(values)):
+            last_vals = values[i-self.feedback_after_episodes:i]
+            vals.append(func(last_vals))
+        return vals, range(self.feedback_after_episodes, len(values)), caption
+
+    def plot_results(self, values, plot_dir, modes=None):
+        colors = ['b','r','g']
+        i = 0
+        if modes is None:
+            modes = ['avg', 'max']
+        fig, ax = plt.subplots()
+        for mode in modes:
+            y, x, caption = self.get_results(values, mode)
+            ax.plot(x, y, colors[i], label=caption)
+            i += 1
+
+        ax.set(xlabel="episodes", title="Performance of the Agent During the Learning Stage")
+        ax.legend()
+        fig.savefig(plot_dir + ".png")
+        plt.close()
+
     def save_stats(self, points_per_episode, frames_per_episode, create_new=False):
         stats_dir = self.agent_dir + "stats.csv"
         if create_new:
@@ -295,6 +334,10 @@ class DQNAgentOpt(Agent):
             for i in range(len(points_per_episode)):
                 stats_file.write(f"\n{points_per_episode[i]},{frames_per_episode[i]}")
         return stats_dir
+
+    # ================================================================================================================
+    # Persistence Methods
+    # ================================================================================================================
 
     def save(self, save_dir=None, save_replay=True, stats_dir=None):
         if save_dir is None:
@@ -311,13 +354,12 @@ class DQNAgentOpt(Agent):
                 pickle.dump(self.replay_memory, replay_file)
         if stats_dir is not None:
             stats = pd.read_csv(stats_dir)["Reward"]
-            self._plot_results(stats, f"{self.agent_dir}{self.n_steps}_steps")
-
+            self.plot_results(stats, f"{self.agent_dir}{self.n_steps}_steps")
 
     @classmethod
     def load(cls, env, name, directory="Agents/", import_replay=True, populate_replay=False):
-        agent = DQNAgentOpt(env, name, directory=directory, replay_start_size=0) if (import_replay or not populate_replay)\
-            else DQNAgentOpt(env, name, directory=directory)
+        agent = DQNAgentOpt(env, name, directory=directory, replay_start_size=0) \
+            if (import_replay or not populate_replay) else DQNAgentOpt(env, name, directory=directory)
 
         agent_dir = os.getcwd() + '/' + directory + name + '/'
 
@@ -327,67 +369,19 @@ class DQNAgentOpt(Agent):
 
         agent.Q.load_state_dict(torch.load(agent_dir + "q_dict.pt"))
         agent.Q_target.load_state_dict(torch.load(agent_dir + "q_target_dict.pt"))
-        agent.optimizer.load_state_dict(torch.load(agent_dir + "optimizer.pt")) # is this necessary?
-        agent.optimizer = optim.RMSprop(agent.Q.parameters(), lr=0.0025, alpha=0.95, eps=0.01)
+        # TODO: is this necessary?
+        agent.optimizer.load_state_dict(torch.load(agent_dir + "optimizer.pt"))
+
+        # TODO: allow user to choose optimizer
+        agent.optimizer = torch.optim.RMSprop(agent.Q.parameters(), lr=0.0025, alpha=0.95, eps=0.01)
         return agent
+    # ================================================================================================================
+    # Other Auxiliary Methods
+    # ================================================================================================================
 
-    def play(self, render=True):
-        self.eval()
-        self.env.restart()
-        observation = self.env.reset()
-        done = False
-        total_reward = 0
-
-        while not done:
-            if render:
-                self.env.render()
-            at = self.action(observation)
-            observation, rt, done, _ = self.env.step(at)
-            total_reward += rt
-
-        self.env.reset()
-        return total_reward
-
-    def q_vals(self, obs):
-        with torch.no_grad():
-            return self.Q(obs).detach().cpu()
-
-    def reinforcement(self, timestep):
-        """Method created for compatibility with the YAAF interface"""
-        if self._training:
-
-            (prev_phi, at, rt, phi, done, _) = timestep
-            prev_phi = self._screen_to_torch(prev_phi)
-            phi = self._screen_to_torch(phi)
-
-            transition = (prev_phi, at, rt, phi, done)
-
-            self.replay_memory.append(transition)
-            self.optimize_model()
-
-
-class DQNAgentNotAtari(DQNAgentOpt):
-
-    def __init__(self, env, replay_memory_size=100_000, minibatch_size=32, replay_start_size=50_000, C=10_000,
-                lr=0.001, momentum=0.95, min_squared_grad=0.01, gamma=0.99, train_policy=EGreedyLinearDecay(),
-                max_frames=20_000, feed_back_after_episodes=50):
-        super().__init__(env, replay_memory_size=replay_memory_size, minibatch_size=minibatch_size, replay_start_size=replay_start_size,
-                         C=C, lr=lr, momentum=momentum, min_squared_grad=min_squared_grad, gamma=gamma,
-                         atari=False, train_policy=train_policy, max_frames=max_frames,
-                         feed_back_after_episodes=feed_back_after_episodes)
-        self.optimizer = optim.Adam(self.Q.parameters(), lr=lr)
-
-    def _initialize_network(self):
-        self.Q = LinearDQN(self.env.num_features, self.n_actions).to(self.device)
-
-    def _update_target(self):
-        if self.n_steps % self.C == 0:
-            self.Q_target = LinearDQN(self.env.num_features, self.n_actions).to(self.device)
-            self.Q_target.load_state_dict(self.Q.state_dict())
-        self.n_steps += 1
-
+    # TODO: this probably can be removed, check the atari wrapper used
     @staticmethod
-    def _screen_to_torch(screen: np.ndarray):
-        return np.expand_dims(screen, axis=0)
+    def screen_to_torch(screen: np.ndarray):
+        return np.expand_dims(screen.transpose((2, 0, 1)), axis=0)
 
-    # TODO: load needs to be overriden
+
