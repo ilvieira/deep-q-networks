@@ -1,3 +1,5 @@
+# TODO: all that files that create a DQNAgent should define its own environment
+
 import pickle
 import os
 import random as rnd
@@ -6,7 +8,6 @@ import torch
 import time
 import matplotlib.pyplot as plt
 import pandas as pd
-
 from dqn.agents.networks.dqn import DQNetwork
 from dqn.agents.agent import Agent
 
@@ -27,34 +28,29 @@ class DQNAgent(Agent):
                  C=10_000,
                  gamma=0.99,
                  hist_len=4,
-                 atari=True,
                  loss=clip_mse3,
                  policy=AtariDQNPolicy(),
                  max_steps=50_000_000,
                  max_time=604_800,
                  max_episodes=1_000_000_000,
                  feed_back_after_episodes=5,
-                 game_name="game",
+                 frames_per_step=1,
                  save_after_steps=1_000_000,
                  directory="Agents/",
-                 plot_name=None,
-                 seed=0):
+                 plot_name="game",
+                 seed=0,
+                 device=torch.device("cuda" if torch.cuda.is_available() else "cpu")):
 
-        super().__init__(AtariDNQEnv(env) if atari else env)
+        super().__init__(env)
 
-        # TODO: device should probably be decided in the __init__ input
-        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
+        self.device = device
         self.set_seed(seed)
-
-        # TODO: only the environment should be able to know if this is atari or not
-        self._atari = atari
 
         # TODO: probably should be given as a parameter from the user
         self.agent_dir = os.getcwd() + '/' + directory + name + '/'
 
         # TODO: probably should only be defined in the plot creation method
-        self._plot_name = plot_name if plot_name is not None else str(env) if atari else game_name
+        self._plot_name = plot_name
 
         # TODO: redefine how the feedback is displayed
         self.feedback_after_episodes = feed_back_after_episodes
@@ -67,7 +63,7 @@ class DQNAgent(Agent):
         self.max_steps = max_steps
         self.max_time = max_time
         self.max_episodes = max_episodes
-        self.frames_per_step = 4 if atari else 1
+        self.frames_per_step = frames_per_step
 
         # initialize Q and Q_target as a copy of Q
         # TODO: allow the choice of the net by the user
@@ -83,7 +79,7 @@ class DQNAgent(Agent):
 
         # initialize the replay memory
         # TODO: allow user to choose its own replay
-        self.replay_memory = ReplayMemory(replay_memory_size)
+        self.replay_memory = ReplayMemory(replay_memory_size, device=self.device)
         self.replay_start_size = replay_start_size
 
         # TODO: this should not be in setup.
@@ -119,7 +115,7 @@ class DQNAgent(Agent):
     # TODO: see what can be reused from Agent
     def action(self, observation: np.ndarray):
         """Chooses an action given an observation"""
-        phi = torch.tensor(self.screen_to_torch(observation)).float()
+        phi = torch.tensor(self.expand_obs(observation)).float()
 
         # phi is added to the gpu so that Q can make a prediction on it
         with torch.no_grad():
@@ -161,7 +157,7 @@ class DQNAgent(Agent):
 
         while len(self.replay_memory) < self.replay_start_size:
             # restart the environment and get the first observation
-            prev_phi = self.screen_to_torch(self.env.reset())
+            prev_phi = self.expand_obs(self.env.reset())
 
             # done becomes True whenever a terminal state is reached
             done = False
@@ -169,7 +165,7 @@ class DQNAgent(Agent):
             while (not done) and (len(self.replay_memory) < self.replay_start_size):
                 at = random_policy.choose_action()
                 phi, rt, done, _ = self.env.step(at)
-                phi = self.screen_to_torch(phi)
+                phi = self.expand_obs(phi)
                 transition = (prev_phi, at, rt, phi, done)
                 self.replay_memory.append(transition)
                 prev_phi = phi
@@ -219,8 +215,8 @@ class DQNAgent(Agent):
                 self.n_steps += 1
                 at = self.action(observation)
                 next_observation, rt, done, _ = self.env.step(at)
-                transition = (self.screen_to_torch(observation), at, rt,
-                              self.screen_to_torch(next_observation), done)
+                transition = (self.expand_obs(observation), at, rt,
+                              self.expand_obs(next_observation), done)
                 observation = next_observation
                 self.replay_memory.append(transition)
 
@@ -358,8 +354,8 @@ class DQNAgent(Agent):
 
     @classmethod
     def load(cls, env, name, directory="Agents/", import_replay=True, populate_replay=False):
-        agent = DQNAgentOpt(env, name, directory=directory, replay_start_size=0) \
-            if (import_replay or not populate_replay) else DQNAgentOpt(env, name, directory=directory)
+        agent = DQNAgent(env, name, directory=directory, replay_start_size=0) \
+            if (import_replay or not populate_replay) else DQNAgent(env, name, directory=directory)
 
         agent_dir = os.getcwd() + '/' + directory + name + '/'
 
@@ -375,13 +371,48 @@ class DQNAgent(Agent):
         # TODO: allow user to choose optimizer
         agent.optimizer = torch.optim.RMSprop(agent.Q.parameters(), lr=0.0025, alpha=0.95, eps=0.01)
         return agent
+
     # ================================================================================================================
     # Other Auxiliary Methods
     # ================================================================================================================
 
-    # TODO: this probably can be removed, check the atari wrapper used
     @staticmethod
-    def screen_to_torch(screen: np.ndarray):
-        return np.expand_dims(screen.transpose((2, 0, 1)), axis=0)
+    def expand_obs(screen: np.ndarray):
+        return np.expand_dims(screen, axis=0)
 
 
+class DQNAtariAgent(DQNAgent):
+    def __init__(self, env, name, minibatch_size=32,
+                 replay_memory_size=1_000_000,
+                 replay_start_size=50_000,
+                 C=10_000,
+                 gamma=0.99,
+                 hist_len=4,
+                 loss=clip_mse3,
+                 max_steps=50_000_000,
+                 max_time=604_800,
+                 max_episodes=1_000_000_000,
+                 feed_back_after_episodes=5,
+                 save_after_steps=1_000_000,
+                 directory="Agents/",
+                 seed=0,
+                 device=torch.device("cuda" if torch.cuda.is_available() else "cpu")):
+        super().__init__(AtariDNQEnv(env), name,
+                         minibatch_size=minibatch_size,
+                         replay_memory_size=replay_memory_size,
+                         replay_start_size=replay_start_size,
+                         C=C,
+                         gamma=gamma,
+                         hist_len=hist_len,
+                         loss=loss,
+                         policy=AtariDQNPolicy(),
+                         max_steps=max_steps,
+                         max_time=max_time,
+                         frames_per_step=4,
+                         max_episodes=max_episodes,
+                         feed_back_after_episodes=feed_back_after_episodes,
+                         save_after_steps=save_after_steps,
+                         directory=directory,
+                         plot_name=str(env),
+                         seed=seed,
+                         device=device)

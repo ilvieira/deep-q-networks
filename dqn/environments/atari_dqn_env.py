@@ -12,9 +12,10 @@ class AtariDNQEnv(Wrapper):
         """ Deep mind did not use the FireResetEnv wrapper. It turns out that the 0.05 random actions are enough to make
         sure that the game always starts."""
 
-        self._train_env = EpisodicLifeEnv(NvidiaAtari2600Wrapper(env))
+        self._train_env = EpisodicLifeEnv(NvidiaAtari2600Wrapper(env, channels_first=True))
         self._eval_env = NoopResetEnv(
-                            NvidiaAtari2600Wrapper(env, max_reward_clip=np.inf, min_reward_clip=-np.inf))
+                            NvidiaAtari2600Wrapper(env, max_reward_clip=np.inf, min_reward_clip=-np.inf,
+                                                   channels_first=True))
 
         super().__init__(self._train_env)
 
