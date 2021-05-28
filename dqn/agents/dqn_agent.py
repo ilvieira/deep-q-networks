@@ -23,20 +23,20 @@ from dqn.policies.random_policy import RandomPolicy
 
 class DQNAgent(Agent):
     # TODO: check which attributes are actually necessary
+    # TODO: create a getter for the number of frames "trained"
     """ Class that simulates the game and trains the DQN """
     def __init__(self, env, name, replay, minibatch_size=32,
                  optimizer=torch.optim.RMSprop,
                  C=10_000,
+                 update_frequency=1,
                  gamma=0.99,
                  loss=clip_mse3,
                  policy=AtariDQNPolicy(),
-                 max_steps=50_000_000,
-                 max_time=604_800,
-                 max_episodes=1_000_000_000,
-                 feed_back_after_episodes=5,
-                 update_frequency=1,
+
+                 # TODO: these 5 features should only be used in the learn input
                  save_after_steps=1_000_000,
-                 directory="Agents/",
+
+                 directory="Agents/", # TODO: agent_dir should only bee needed in save and load
                  seed=0,
                  device=torch.device("cuda" if torch.cuda.is_available() else "cpu")):
 
@@ -47,16 +47,11 @@ class DQNAgent(Agent):
         self.agent_dir = directory + name + '/'
 
         # TODO: redefine how the feedback is displayed
-        self.feedback_after_episodes = feed_back_after_episodes
         self.save_after_steps = save_after_steps
         self.n_steps = 0
         self.update_frequency = update_frequency
 
         self.C = C
-
-        self.max_steps = max_steps
-        self.max_time = max_time
-        self.max_episodes = max_episodes
 
         # initialize Q and Q_target as a copy of Q
         # TODO: allow the choice of the net by the user
@@ -144,7 +139,12 @@ class DQNAgent(Agent):
         if verbose:
             print(f"Done - {time.time()-start}s")
 
-    def learn(self, store_stats=True, create_new=True, verbose=True):
+    def learn(self, store_stats=True, create_new=True, verbose=True,
+                 max_steps=50_000_000,
+                 max_time=604_800,
+                 max_episodes=1_000_000_000,
+                 feedback_after_episodes=5,
+                 save_after_steps=1_000_000,):
         """The algorithm as described in 'Human-level control through deep reinforcement learning'"""
 
         if store_stats:
@@ -165,14 +165,14 @@ class DQNAgent(Agent):
         if store_stats:
             self.save_stats(points_per_episode, frames_per_episode, create_new=create_new)
 
-        for episode in range(self.max_episodes):
+        for episode in range(max_episodes):
             ep_reward = 0
             ep_frames = 0
 
             if verbose:
-                if episode % self.feedback_after_episodes == 0 and not episode == 0:
+                if episode % feedback_after_episodes == 0 and not episode == 0:
                     print(f"... episode {episode} ... - {time.time()-start}")
-                    print(f"  average reward: {total_reward / self.feedback_after_episodes}")
+                    print(f"  average reward: {total_reward / feedback_after_episodes}")
                     print(f"  maximum reward: {max_reward}")
                     print(f"  total frames: {self.n_steps}")
                     print(f"  transitions stored: {len(self.replay_memory)}")
@@ -200,18 +200,18 @@ class DQNAgent(Agent):
                 # PERSISTENCE: Save after each save_after_steps_frame
                 if self.n_steps > 0 and self.n_steps % self.save_after_steps == 0:
                     stats_dir = self.save_stats(points_per_episode, frames_per_episode) if store_stats else None
-                    self.save(stats_dir=stats_dir)
+                    self.save(stats_dir=stats_dir, feedback_after_episodes=feedback_after_episodes)
                     points_per_episode = []
                     frames_per_episode = []
                     if verbose:
                         print(f"Agent saved ({self.n_steps} steps)")
 
                 # STOP if the maximum number of steps or time are reached
-                if self.n_steps > self.max_steps or time.time() - start > self.max_time:
+                if self.n_steps > max_steps or time.time() - start > max_time:
                     if verbose:
                         print("Done")
                     stats_dir = self.save_stats(points_per_episode, frames_per_episode) if store_stats else None
-                    self.save(stats_dir=stats_dir)
+                    self.save(stats_dir=stats_dir, feedback_after_episodes=feedback_after_episodes)
                     return
 
             if ep_reward > max_reward:
@@ -220,7 +220,7 @@ class DQNAgent(Agent):
             frames_per_episode.append(ep_frames)
 
         stats_dir = self.save_stats(points_per_episode, frames_per_episode) if store_stats else None
-        self.save(stats_dir=stats_dir)
+        self.save(stats_dir=stats_dir, feedback_after_episodes=feedback_after_episodes)
         if verbose:
             print("Done")
 
@@ -258,31 +258,31 @@ class DQNAgent(Agent):
     # Statistics and Plot Methods
     # ================================================================================================================
 
-    def get_results(self, values, mode="avg"):
+    def get_results(self, feedback_after_episodes, values, mode="avg"):
         """Mode should either be max or avg or simple"""
         if mode == "simple":
             return values, range(len(values)), "Points per episode"
 
         func = max if mode =="max" else lambda x: sum(x)/len(x) if mode=="avg" else None
-        caption = f"Average points over the last {self.feedback_after_episodes} episodes" if mode == "avg" \
-            else f"Maximum points over the last {self.feedback_after_episodes} episodes" if mode == "max" else None
+        caption = f"Average points over the last {feedback_after_episodes} episodes" if mode == "avg" \
+            else f"Maximum points over the last {feedback_after_episodes} episodes" if mode == "max" else None
         if func is None:
             raise(ValueError("mode attribute should either be 'simple', 'max' or 'avg'."))
 
         vals = []
-        for i in range(self.feedback_after_episodes, len(values)):
-            last_vals = values[i-self.feedback_after_episodes:i]
+        for i in range(feedback_after_episodes, len(values)):
+            last_vals = values[i-feedback_after_episodes:i]
             vals.append(func(last_vals))
-        return vals, range(self.feedback_after_episodes, len(values)), caption
+        return vals, range(feedback_after_episodes, len(values)), caption
 
-    def plot_results(self, values, plot_dir, modes=None):
+    def plot_results(self, feedback_after_episodes, values, plot_dir, modes=None):
         colors = ['b','r','g']
         i = 0
         if modes is None:
             modes = ['avg', 'max']
         fig, ax = plt.subplots()
         for mode in modes:
-            y, x, caption = self.get_results(values, mode)
+            y, x, caption = self.get_results(feedback_after_episodes, values, mode)
             ax.plot(x, y, colors[i], label=caption)
             i += 1
 
@@ -305,7 +305,7 @@ class DQNAgent(Agent):
     # Persistence Methods
     # ================================================================================================================
 
-    def save(self, save_dir=None, save_replay=True, stats_dir=None):
+    def save(self, save_dir=None, save_replay=True, stats_dir=None, feedback_after_episodes=None):
         # TODO: while saving, store the parameters of this class
         if save_dir is None:
             save_dir = self.agent_dir
@@ -321,7 +321,7 @@ class DQNAgent(Agent):
                 pickle.dump(self.replay_memory, replay_file)
         if stats_dir is not None:
             stats = pd.read_csv(stats_dir)["Reward"]
-            self.plot_results(stats, f"{self.agent_dir}{self.n_steps}_steps")
+            self.plot_results(feedback_after_episodes, stats, f"{self.agent_dir}{self.n_steps}_steps")
 
     @classmethod
     def load(cls, env, name, directory="Agents/", import_replay=True, populate_replay=False,
@@ -357,11 +357,6 @@ class DQNAtariAgent(DQNAgent):
                  C=10_000,
                  gamma=0.99,
                  loss=clip_mse3,
-                 max_steps=50_000_000,
-                 max_time=604_800,
-                 max_episodes=1_000_000_000,
-                 feed_back_after_episodes=5,
-                 save_after_steps=1_000_000,
                  directory="Agents/",
                  seed=0,
                  device=torch.device("cuda" if torch.cuda.is_available() else "cpu")):
@@ -372,15 +367,16 @@ class DQNAtariAgent(DQNAgent):
                          gamma=gamma,
                          loss=loss,
                          policy=AtariDQNPolicy(),
-                         max_steps=max_steps,
-                         max_time=max_time,
                          update_frequency=4,
-                         max_episodes=max_episodes,
-                         feed_back_after_episodes=feed_back_after_episodes,
-                         save_after_steps=save_after_steps,
                          directory=directory,
                          seed=seed,
                          device=device)
+
+    def learn(self, store_stats=True, create_new=True, verbose=True,  max_steps=50_000_000, max_time=604_800,
+              max_episodes=1_000_000_000, feedback_after_episodes=5, save_after_steps=1_000_000,):
+        return super().learn(store_stats=store_stats, create_new=create_new, verbose=verbose, max_steps=max_steps,
+                             max_time=max_time, max_episodes=max_episodes,
+                             feed_back_after_episodes=feedback_after_episodes, save_after_steps=save_after_steps)
 
     def eval(self):
         super().eval()
