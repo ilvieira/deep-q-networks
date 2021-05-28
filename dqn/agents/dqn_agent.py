@@ -28,14 +28,13 @@ class DQNAgent(Agent):
                  optimizer=torch.optim.RMSprop,
                  C=10_000,
                  gamma=0.99,
-                 hist_len=4,
                  loss=clip_mse3,
                  policy=AtariDQNPolicy(),
                  max_steps=50_000_000,
                  max_time=604_800,
                  max_episodes=1_000_000_000,
                  feed_back_after_episodes=5,
-                 frames_per_step=1,
+                 update_frequency=1,
                  save_after_steps=1_000_000,
                  directory="Agents/",
                  seed=0,
@@ -51,7 +50,7 @@ class DQNAgent(Agent):
         self.feedback_after_episodes = feed_back_after_episodes
         self.save_after_steps = save_after_steps
         self.n_steps = 0
-        self.hist_len = hist_len
+        self.update_frequency = update_frequency
 
         self.C = C
 
@@ -123,7 +122,7 @@ class DQNAgent(Agent):
 
         if verbose:
             print("Populating the replay memory...")
-            start = time.time()
+        start = time.time()
 
         transitions_added = 0
         while transitions_added < n_samples:
@@ -154,7 +153,7 @@ class DQNAgent(Agent):
 
         if verbose:
             print("Beginning the training stage...")
-            start = time.time()
+        start = time.time()
 
         self.train()
 
@@ -190,8 +189,8 @@ class DQNAgent(Agent):
                 total_reward += rt
                 ep_reward += rt
 
-                # Backpropagation at each hist_len frames
-                if self.n_steps % self.hist_len == 0:
+                # Backpropagation at each upadte_frequency frames
+                if self.n_steps % self.update_frequency == 0:
                     self.optimize_model()
 
                 # Update target network at each C frames
@@ -327,7 +326,7 @@ class DQNAgent(Agent):
     @classmethod
     def load(cls, env, name, directory="Agents/", import_replay=True, populate_replay=False,
              optimizer=torch.optim.RMSprop):
-
+        # TODO: review loading as well
         agent = DQNAgent(env, name, None, directory=directory)
         agent_dir = os.getcwd() + '/' + directory + name + '/'
 
@@ -357,7 +356,6 @@ class DQNAtariAgent(DQNAgent):
                  replay_memory_size=1_000_000,
                  C=10_000,
                  gamma=0.99,
-                 hist_len=4,
                  loss=clip_mse3,
                  max_steps=50_000_000,
                  max_time=604_800,
@@ -372,12 +370,11 @@ class DQNAtariAgent(DQNAgent):
                          minibatch_size=minibatch_size,
                          C=C,
                          gamma=gamma,
-                         hist_len=hist_len,
                          loss=loss,
                          policy=AtariDQNPolicy(),
                          max_steps=max_steps,
                          max_time=max_time,
-                         frames_per_step=4,
+                         update_frequency=4,
                          max_episodes=max_episodes,
                          feed_back_after_episodes=feed_back_after_episodes,
                          save_after_steps=save_after_steps,
