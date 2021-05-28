@@ -25,9 +25,6 @@ class DQNAgent(Agent):
     # TODO: check which attributes are actually necessary
     """ Class that simulates the game and trains the DQN """
     def __init__(self, env, name, replay, minibatch_size=32,
-                 #replay_memory_size=1_000_000,
-                 #replay_start_size=50_000,
-
                  optimizer=torch.optim.RMSprop,
                  C=10_000,
                  gamma=0.99,
@@ -61,7 +58,6 @@ class DQNAgent(Agent):
         self.max_steps = max_steps
         self.max_time = max_time
         self.max_episodes = max_episodes
-        self.frames_per_step = frames_per_step
 
         # initialize Q and Q_target as a copy of Q
         # TODO: allow the choice of the net by the user
@@ -72,7 +68,7 @@ class DQNAgent(Agent):
         self.gamma = gamma
         self.minibatch_size = minibatch_size
         self.optimizer = optimizer(self.Q.parameters(), lr=0.0025, alpha=0.95, eps=0.01)
-        self._clip_value = 1
+        self.clip_value = 1
 
         # initialize the replay memory
         self.replay_memory = replay
@@ -230,7 +226,7 @@ class DQNAgent(Agent):
             print("Done")
 
     def optimize_model(self):
-        r, prev_phi, next_phi, not_done, actions = self.replay_memory.sample(self.minibatch_size, device=self.device)
+        r, prev_phi, next_phi, not_done, actions = self.replay_memory.sample(self.minibatch_size)
 
         with torch.no_grad():
             y = (r + self.gamma * not_done * self.Q_target(next_phi)
@@ -311,6 +307,7 @@ class DQNAgent(Agent):
     # ================================================================================================================
 
     def save(self, save_dir=None, save_replay=True, stats_dir=None):
+        # TODO: while saving, store the parameters of this class
         if save_dir is None:
             save_dir = self.agent_dir
         agent_dir = save_dir if (save_dir[-1] == '/' or save_dir[-1] == '\\') else save_dir + '/'
@@ -330,9 +327,8 @@ class DQNAgent(Agent):
     @classmethod
     def load(cls, env, name, directory="Agents/", import_replay=True, populate_replay=False,
              optimizer=torch.optim.RMSprop):
-        agent = DQNAgent(env, name, directory=directory, replay_start_size=0) \
-            if (import_replay or not populate_replay) else DQNAgent(env, name, directory=directory)
 
+        agent = DQNAgent(env, name, None, directory=directory)
         agent_dir = os.getcwd() + '/' + directory + name + '/'
 
         if import_replay:
@@ -371,7 +367,7 @@ class DQNAtariAgent(DQNAgent):
                  directory="Agents/",
                  seed=0,
                  device=torch.device("cuda" if torch.cuda.is_available() else "cpu")):
-        replay = DQNReplayMemoryAtari(replay_memory_size)
+        replay = DQNReplayMemoryAtari(replay_memory_size, device=device)
         super().__init__(AtariDNQEnv(env), name, replay,
                          minibatch_size=minibatch_size,
                          C=C,
@@ -389,31 +385,31 @@ class DQNAtariAgent(DQNAgent):
                          seed=seed,
                          device=device)
 
-        def eval(self):
-            super().eval()
-            self.env.eval()
-            self.policy.eval()
+    def eval(self):
+        super().eval()
+        self.env.eval()
+        self.policy.eval()
 
-        def train(self):
-            super().train()
-            self.env.train()
-            self.policy.train()
+    def train(self):
+        super().train()
+        self.env.train()
+        self.policy.train()
 
-        # TODO: see what can be reused from Agent
-        def play(self, render=True):
-            self.eval()
-            self.env.restart()
-            observation = self.env.reset()
-            done = False
-            total_reward = 0
+    # TODO: see what can be reused from Agent
+    def play(self, render=True):
+        self.eval()
+        self.env.restart()
+        observation = self.env.reset()
+        done = False
+        total_reward = 0
 
-            while not done:
-                if render:
-                    self.env.render()
-                at = self.action(observation)
-                observation, rt, done, _ = self.env.step(at)
-                total_reward += rt
+        while not done:
+            if render:
+                self.env.render()
+            at = self.action(observation)
+            observation, rt, done, _ = self.env.step(at)
+            total_reward += rt
 
-            self.env.reset()
-            return total_reward
+        self.env.reset()
+        return total_reward
 
