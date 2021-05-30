@@ -32,11 +32,7 @@ class DQNAgent(Agent):
                  gamma=0.99,
                  loss=clip_mse3,
                  policy=AtariDQNPolicy(),
-
-                 # TODO: these 5 features should only be used in the learn input
-                 save_after_steps=1_000_000,
-
-                 directory="Agents/", # TODO: agent_dir should only bee needed in save and load
+                 directory="Agents/", # TODO: agent_dir should only be needed in save and load
                  seed=0,
                  device=torch.device("cuda" if torch.cuda.is_available() else "cpu")):
 
@@ -46,11 +42,8 @@ class DQNAgent(Agent):
         self.set_seed(seed)
         self.agent_dir = directory + name + '/'
 
-        # TODO: redefine how the feedback is displayed
-        self.save_after_steps = save_after_steps
         self.n_steps = 0
         self.update_frequency = update_frequency
-
         self.C = C
 
         # initialize Q and Q_target as a copy of Q
@@ -140,11 +133,11 @@ class DQNAgent(Agent):
             print(f"Done - {time.time()-start}s")
 
     def learn(self, store_stats=True, create_new=True, verbose=True,
-                 max_steps=50_000_000,
-                 max_time=604_800,
-                 max_episodes=1_000_000_000,
-                 feedback_after_episodes=5,
-                 save_after_steps=1_000_000,):
+              max_steps=50_000_000,
+              max_time=604_800,
+              max_episodes=1_000_000_000,
+              feedback_after_episodes=5,
+              save_after_steps=1_000_000,):
         """The algorithm as described in 'Human-level control through deep reinforcement learning'"""
 
         if store_stats:
@@ -198,7 +191,7 @@ class DQNAgent(Agent):
                     self.update_target()
 
                 # PERSISTENCE: Save after each save_after_steps_frame
-                if self.n_steps > 0 and self.n_steps % self.save_after_steps == 0:
+                if self.n_steps > 0 and self.n_steps % save_after_steps == 0:
                     stats_dir = self.save_stats(points_per_episode, frames_per_episode) if store_stats else None
                     self.save(stats_dir=stats_dir, feedback_after_episodes=feedback_after_episodes)
                     points_per_episode = []
@@ -380,29 +373,11 @@ class DQNAtariAgent(DQNAgent):
 
     def eval(self):
         super().eval()
-        self.env.eval()
-        self.policy.eval()
+        self.env.restart()
 
     def train(self):
         super().train()
-        self.env.train()
-        self.policy.train()
-
-    # TODO: see what can be reused from Agent
-    def play(self, render=True):
-        self.eval()
         self.env.restart()
-        observation = self.env.reset()
-        done = False
-        total_reward = 0
 
-        while not done:
-            if render:
-                self.env.render()
-            at = self.action(observation)
-            observation, rt, done, _ = self.env.step(at)
-            total_reward += rt
 
-        self.env.reset()
-        return total_reward
 
