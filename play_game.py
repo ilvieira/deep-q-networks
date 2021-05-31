@@ -5,7 +5,6 @@ import torch
 env = "PongDeterministic-v4"
 save_dir = os.getcwd()+"/Agents/test_pong"
 
-print("hello")
 agent = DQNAtariAgent(env, replay_memory_size=1_000_000)
 
 agent.populate_replay_memory(100)
