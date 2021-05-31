@@ -4,13 +4,9 @@ from abc import ABC, abstractmethod
 
 class Agent(ABC):
 
-    def __init__(self, env):
-        # TODO: agent should be independent of gym, this should only depend on the environment
-        self.env = gym.make(env) if type(env) == str else env
-
-        # TODO: there is probably no need to save the number of actions here
-        self.n_actions = self.env.action_space.n
-
+    def __init__(self, env, n_actions):
+        self.env = env
+        self.n_actions = n_actions
         self._training = True
 
     def train(self):

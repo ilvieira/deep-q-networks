@@ -1,7 +1,3 @@
-# TODO: all that files that create a DQNAgent should define its own environment,
-#  also: directory
-#  also: populate replay
-
 import pickle
 import os
 import random as rnd
@@ -13,7 +9,6 @@ import pandas as pd
 from dqn.agents.networks.dqn import DQNetwork
 from dqn.agents.agent import Agent
 
-# TODO: allow the user to choose its own replay and add an AtariDQNAgent which automatically selects the atari replay
 from dqn.memory.dqn_replay_memory_atari import DQNReplayMemoryAtari
 from dqn.environments.atari_dqn_env import AtariDNQEnv
 from dqn.policies.atari_dqn_policy import AtariDQNPolicy
@@ -22,53 +17,55 @@ from dqn.policies.random_policy import RandomPolicy
 
 
 class DQNAgent(Agent):
-    # TODO: check which attributes are actually necessary
-    # TODO: create a getter for the number of frames "trained"
     """ Class that simulates the game and trains the DQN """
-    def __init__(self, env, name, replay, minibatch_size=32,
+
+    def __init__(self, env, replay, n_actions, net_type,
+                 minibatch_size=32,
                  optimizer=torch.optim.RMSprop,
                  C=10_000,
                  update_frequency=1,
                  gamma=0.99,
                  loss=clip_mse3,
                  policy=AtariDQNPolicy(),
-                 directory="Agents/", # TODO: agent_dir should only be needed in save and load
                  seed=0,
-                 device=torch.device("cuda" if torch.cuda.is_available() else "cpu")):
+                 device="cuda" if torch.cuda.is_available() else "cpu",
+                 optimizer_parameters=None):
 
-        super().__init__(env)
-
-        self.device = device
+        super().__init__(env, n_actions)
+        self.device = torch.device(device)
         self.set_seed(seed)
-        self.agent_dir = directory + name + '/'
 
-        self.n_steps = 0
+        self.n_frames = 0
         self.update_frequency = update_frequency
         self.C = C
 
         # initialize Q and Q_target as a copy of Q
-        # TODO: allow the choice of the net by the user
-        self.Q = DQNetwork(self.n_actions).to(self.device)
+        self.Q = net_type(self.n_actions).to(self.device)
         self.update_target()
 
         # other parameters
         self.gamma = gamma
         self.minibatch_size = minibatch_size
-        self.optimizer = optimizer(self.Q.parameters(), lr=0.0025, alpha=0.95, eps=0.01)
+        self.optimizer_parameters = optimizer_parameters if optimizer_parameters is not None \
+            else {"lr": 0.0025, "alpha": 0.95, "eps": 0.01}
+
+        self.optimizer = optimizer(self.Q.parameters(), **optimizer_parameters)
         self.clip_value = 1
 
         # initialize the replay memory
         self.replay_memory = replay
-
         self.policy = policy
         self.loss = loss
+
+        # other auxiliary attributes:
+        self._points_per_episode = []
+        self._frames_per_episode = []
 
     # ================================================================================================================
     # Setup Methods
     # ================================================================================================================
-
-    @staticmethod
-    def set_seed(seed: int):
+    def set_seed(self, seed: int):
+        self.seed = seed
         torch.manual_seed(seed)
         rnd.seed(seed)
         np.random.seed(seed)
@@ -130,33 +127,21 @@ class DQNAgent(Agent):
                 prev_phi = phi
 
         if verbose:
-            print(f"Done - {time.time()-start}s")
+            print(f"Done - {time.time() - start}s")
 
-    def learn(self, store_stats=True, create_new=True, verbose=True,
-              max_steps=50_000_000,
-              max_time=604_800,
-              max_episodes=1_000_000_000,
-              feedback_after_episodes=5,
-              save_after_steps=1_000_000,):
+    def learn(self, save_dir, save_replay=True, verbose=True, max_steps=50_000_000, max_time=604_800,
+              max_episodes=1_000_000_000, feedback_after_episodes=5, save_after_steps=1_000_000):
         """The algorithm as described in 'Human-level control through deep reinforcement learning'"""
-
-        if store_stats:
-            if not os.path.exists(self.agent_dir):
-                os.makedirs(self.agent_dir)
-
         if verbose:
             print("Beginning the training stage...")
         start = time.time()
+        save_params = {"save_dir": save_dir, "save_replay": save_replay,
+                       "feedback_after_episodes": feedback_after_episodes}
+        self.save(**save_params)
 
         self.train()
-
         total_reward = 0
         max_reward = float('-inf')
-        points_per_episode = []
-        frames_per_episode = []
-
-        if store_stats:
-            self.save_stats(points_per_episode, frames_per_episode, create_new=create_new)
 
         for episode in range(max_episodes):
             ep_reward = 0
@@ -164,10 +149,10 @@ class DQNAgent(Agent):
 
             if verbose:
                 if episode % feedback_after_episodes == 0 and not episode == 0:
-                    print(f"... episode {episode} ... - {time.time()-start}")
+                    print(f"... episode {episode} ... - {time.time() - start}")
                     print(f"  average reward: {total_reward / feedback_after_episodes}")
                     print(f"  maximum reward: {max_reward}")
-                    print(f"  total frames: {self.n_steps}")
+                    print(f"  total frames: {self.n_frames}")
                     print(f"  transitions stored: {len(self.replay_memory)}")
                     total_reward = 0
                     max_reward = float('-inf')
@@ -177,43 +162,36 @@ class DQNAgent(Agent):
 
             while not done:
                 observation, rt = self.play_and_store_transition(observation)
-                self.n_steps += 1
+                self.n_frames += 1
                 ep_frames += 1
                 total_reward += rt
                 ep_reward += rt
 
-                # Backpropagation at each upadte_frequency frames
-                if self.n_steps % self.update_frequency == 0:
+                # Backpropagation at each update_frequency frames
+                if self.n_frames % self.update_frequency == 0:
                     self.optimize_model()
 
                 # Update target network at each C frames
-                if self.n_steps % self.C == 0:
+                if self.n_frames % self.C == 0:
                     self.update_target()
 
                 # PERSISTENCE: Save after each save_after_steps_frame
-                if self.n_steps > 0 and self.n_steps % save_after_steps == 0:
-                    stats_dir = self.save_stats(points_per_episode, frames_per_episode) if store_stats else None
-                    self.save(stats_dir=stats_dir, feedback_after_episodes=feedback_after_episodes)
-                    points_per_episode = []
-                    frames_per_episode = []
+                if self.n_frames > 0 and self.n_frames % save_after_steps == 0:
+                    self.save(**save_params)
                     if verbose:
-                        print(f"Agent saved ({self.n_steps} steps)")
+                        print(f"Agent saved ({self.n_frames} steps)")
 
                 # STOP if the maximum number of steps or time are reached
-                if self.n_steps > max_steps or time.time() - start > max_time:
+                if self.n_frames > max_steps or time.time() - start > max_time:
                     if verbose:
                         print("Done")
-                    stats_dir = self.save_stats(points_per_episode, frames_per_episode) if store_stats else None
-                    self.save(stats_dir=stats_dir, feedback_after_episodes=feedback_after_episodes)
                     return
 
             if ep_reward > max_reward:
                 max_reward = ep_reward
-            points_per_episode.append(ep_reward)
-            frames_per_episode.append(ep_frames)
+            self._points_per_episode.append(ep_reward)
+            self._frames_per_episode.append(ep_frames)
 
-        stats_dir = self.save_stats(points_per_episode, frames_per_episode) if store_stats else None
-        self.save(stats_dir=stats_dir, feedback_after_episodes=feedback_after_episodes)
         if verbose:
             print("Done")
 
@@ -243,8 +221,7 @@ class DQNAgent(Agent):
         return next_observation, rt
 
     def update_target(self):
-        # TODO: allow the choice of net by the user. Probably a good idea to copy the class of Q
-        self.Q_target = DQNetwork(self.n_actions).to(self.device)
+        self.Q_target = type(self.Q)(self.n_actions).to(self.device)
         self.Q_target.load_state_dict(self.Q.state_dict())
 
     # ================================================================================================================
@@ -256,20 +233,20 @@ class DQNAgent(Agent):
         if mode == "simple":
             return values, range(len(values)), "Points per episode"
 
-        func = max if mode =="max" else lambda x: sum(x)/len(x) if mode=="avg" else None
+        func = max if mode == "max" else lambda x: sum(x) / len(x) if mode == "avg" else None
         caption = f"Average points over the last {feedback_after_episodes} episodes" if mode == "avg" \
             else f"Maximum points over the last {feedback_after_episodes} episodes" if mode == "max" else None
         if func is None:
-            raise(ValueError("mode attribute should either be 'simple', 'max' or 'avg'."))
+            raise (ValueError("mode attribute should either be 'simple', 'max' or 'avg'."))
 
         vals = []
         for i in range(feedback_after_episodes, len(values)):
-            last_vals = values[i-feedback_after_episodes:i]
+            last_vals = values[i - feedback_after_episodes:i]
             vals.append(func(last_vals))
         return vals, range(feedback_after_episodes, len(values)), caption
 
     def plot_results(self, feedback_after_episodes, values, plot_dir, modes=None):
-        colors = ['b','r','g']
+        colors = ['b', 'r', 'g']
         i = 0
         if modes is None:
             modes = ['avg', 'max']
@@ -284,55 +261,103 @@ class DQNAgent(Agent):
         fig.savefig(plot_dir + ".png")
         plt.close()
 
-    def save_stats(self, points_per_episode, frames_per_episode, create_new=False):
-        stats_dir = self.agent_dir + "stats.csv"
-        if create_new:
+    def save_stats(self, stats_dir):
+        if self.n_frames == 0:
             with open(stats_dir, "w") as stats_file:
                 stats_file.write("Reward,Frames")
         with open(stats_dir, "a") as stats_file:
-            for i in range(len(points_per_episode)):
-                stats_file.write(f"\n{points_per_episode[i]},{frames_per_episode[i]}")
-        return stats_dir
+            for i in range(len(self._points_per_episode)):
+                stats_file.write(f"\n{self._points_per_episode[i]},{self._frames_per_episode[i]}")
+        self._frames_per_episode = []
+        self._points_per_episode = []
 
     # ================================================================================================================
     # Persistence Methods
     # ================================================================================================================
 
-    def save(self, save_dir=None, save_replay=True, stats_dir=None, feedback_after_episodes=None):
-        # TODO: while saving, store the parameters of this class
-        if save_dir is None:
-            save_dir = self.agent_dir
+    def get_checkpoint(self):
+        parameters = dict()
+        # parameters["env"] = self.env # as of now, there is no way to store the environment
+        parameters["n_actions"] = self.n_actions
+        parameters["seed"] = self.seed
+        parameters["n_frames"] = self.n_frames
+        parameters["update_frequency"] = self.update_frequency
+        parameters["C"] = self.C
+        parameters["gamma"] = self.gamma
+        parameters["minibatch_size"] = self.minibatch_size
+        parameters["clip_value"] = self.clip_value
+        parameters["optimizer_class_name"] = self.optimizer.__class__.__name__
+        parameters["optimizer_parameters"] = self.optimizer_parameters
+        parameters["optimizer_state_dict"] = self.optimizer.state_dict()
+        parameters["Q_class_name"] = self.Q.__class__.__name__
+        parameters["Q_state_dict"] = self.Q.state_dict()
+        parameters["Q_target_state_dict"] = self.Q_target.state_dict()
+        parameters["loss"] = self.loss
+        parameters["policy"] = self.policy
+        return parameters
+
+    def save(self, save_dir, save_replay=True, feedback_after_episodes=1):
         agent_dir = save_dir if (save_dir[-1] == '/' or save_dir[-1] == '\\') else save_dir + '/'
+        stats_dir = agent_dir + "stats.csv"
         if not os.path.exists(agent_dir):
             os.makedirs(agent_dir)
 
-        torch.save(self.Q.state_dict(), agent_dir+"q_dict.pt")
-        torch.save(self.Q_target.state_dict(), agent_dir+"q_target_dict.pt")
-        torch.save(self.optimizer.state_dict(), agent_dir+"optimizer.pt")
+        # Save this agent
+        checkpoint = self.get_checkpoint()
+        torch.save(checkpoint, agent_dir + "agent.tar")
+
+        # Save the statistics of the learning stage
+        self.save_stats(stats_dir)
+
+        # Recover the recent statistics and the ones that were already stored in the stats.csv file. Use them to build a
+        # plot of the progress during the learning stage
+        stats = pd.read_csv(stats_dir)["Reward"]
+        self.plot_results(feedback_after_episodes, stats, f"{agent_dir}{self.n_frames}_steps")
+
+        # Save the replay memory
         if save_replay:
-            with open(agent_dir+"replay.p", "wb") as replay_file:
+            with open(agent_dir + "replay.p", "wb") as replay_file:
                 pickle.dump(self.replay_memory, replay_file)
-        if stats_dir is not None:
-            stats = pd.read_csv(stats_dir)["Reward"]
-            self.plot_results(feedback_after_episodes, stats, f"{self.agent_dir}{self.n_steps}_steps")
 
     @classmethod
-    def load(cls, env, name, directory="Agents/", import_replay=True, populate_replay=False,
-             optimizer=torch.optim.RMSprop):
-        # TODO: review loading as well
-        agent = DQNAgent(env, name, None, directory=directory)
-        agent_dir = os.getcwd() + '/' + directory + name + '/'
-
+    def load(cls, env, agent_dir, net_type, import_replay=True, optimizer=torch.optim.RMSprop,
+             device=("cuda" if torch.cuda.is_available() else "cpu")):
+        agent_dir = agent_dir if (agent_dir[-1] == '/' or agent_dir[-1] == '\\') else agent_dir + '/'
+        checkpoint = torch.load(agent_dir + "agent.tar", map_location=device)
         if import_replay:
             with open(agent_dir + "replay.p", "rb") as replay_file:
-                agent.replay_memory = pickle.load(replay_file)
+                replay = pickle.load(replay_file)
+                print(len(replay))
+        else:
+            replay = None
 
-        agent.Q.load_state_dict(torch.load(agent_dir + "q_dict.pt"))
-        agent.Q_target.load_state_dict(torch.load(agent_dir + "q_target_dict.pt"))
-        # TODO: is this necessary? Commented until can tell the answer. Need further testing to make a decision
-        # agent.optimizer.load_state_dict(torch.load(agent_dir + "optimizer.pt"))
+        if net_type.__name__ != checkpoint["Q_class_name"]:
+            raise ValueError(f"The networks for this agent are of the type '{checkpoint['Q_class_name']}', but there"
+                             + f" was attempt to load it using a net of the type '{net_type}'.")
+        if optimizer.__name__ != checkpoint["optimizer_class_name"]:
+            raise ValueError(f"The optimizer for this agent is of the type '{checkpoint['optimizer_class_name']}', but"
+                             + f" there was attempt to load it using an optimizer of the type '{optimizer}'.")
+        return cls.get_agent_from_checkpoint(checkpoint, net_type, optimizer, env, replay, device)
 
-        agent.optimizer = optimizer(agent.Q.parameters(), lr=0.0025, alpha=0.95, eps=0.01)
+    @classmethod
+    def get_agent_from_checkpoint(cls, checkpoint, net_type, optimizer, env, replay, device):
+        print("agent from checkpoint")
+        agent = cls(env, replay, checkpoint["n_actions"], net_type,
+                    minibatch_size=checkpoint["minibatch_size"],
+                    optimizer=optimizer,
+                    C=checkpoint["C"],
+                    update_frequency=checkpoint["update_frequency"],
+                    gamma=checkpoint["gamma"],
+                    loss=checkpoint["loss"],
+                    policy=checkpoint["policy"],
+                    seed=checkpoint["seed"],
+                    device=device,
+                    optimizer_parameters=checkpoint["optimizer_parameters"])
+        agent.Q.load_state_dict(checkpoint["Q_state_dict"])
+        agent.Q_target.load_state_dict(checkpoint["Q_target_state_dict"])
+        agent.optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
+        agent.n_frames = checkpoint["n_frames"]
+        agent.clip_value = checkpoint["clip_value"]
         return agent
 
     # ================================================================================================================
@@ -345,31 +370,34 @@ class DQNAgent(Agent):
 
 
 class DQNAtariAgent(DQNAgent):
-    def __init__(self, env, name, minibatch_size=32,
+    def __init__(self, env, minibatch_size=32,
                  replay_memory_size=1_000_000,
                  C=10_000,
                  gamma=0.99,
                  loss=clip_mse3,
-                 directory="Agents/",
                  seed=0,
-                 device=torch.device("cuda" if torch.cuda.is_available() else "cpu")):
+                 device=("cuda" if torch.cuda.is_available() else "cpu"),
+                 optimizer_parameters=None):
         replay = DQNReplayMemoryAtari(replay_memory_size, device=device)
-        super().__init__(AtariDNQEnv(env), name, replay,
+        env = AtariDNQEnv(env)
+        optimizer_parameters = optimizer_parameters if optimizer_parameters is not None \
+            else {"lr": 0.0025, "alpha": 0.95, "eps": 0.01}
+        super().__init__(env, replay, env.action_space.n, DQNetwork,
                          minibatch_size=minibatch_size,
                          C=C,
                          gamma=gamma,
                          loss=loss,
                          policy=AtariDQNPolicy(),
                          update_frequency=4,
-                         directory=directory,
                          seed=seed,
-                         device=device)
+                         device=device,
+                         optimizer_parameters=optimizer_parameters)
 
-    def learn(self, store_stats=True, create_new=True, verbose=True,  max_steps=50_000_000, max_time=604_800,
-              max_episodes=1_000_000_000, feedback_after_episodes=5, save_after_steps=1_000_000,):
-        return super().learn(store_stats=store_stats, create_new=create_new, verbose=verbose, max_steps=max_steps,
-                             max_time=max_time, max_episodes=max_episodes,
-                             feed_back_after_episodes=feedback_after_episodes, save_after_steps=save_after_steps)
+    def learn(self, save_dir, save_replay=True, store_stats=True, verbose=True, max_steps=50_000_000, max_time=604_800,
+              max_episodes=1_000_000_000, feedback_after_episodes=5, save_after_steps=1_000_000, ):
+        return super().learn(save_dir, save_replay=True, verbose=verbose, max_steps=max_steps, max_time=max_time,
+                             max_episodes=max_episodes, feedback_after_episodes=feedback_after_episodes,
+                             save_after_steps=save_after_steps)
 
     def eval(self):
         super().eval()
@@ -379,5 +407,25 @@ class DQNAtariAgent(DQNAgent):
         super().train()
         self.env.restart()
 
+    @classmethod
+    def load(cls, env, agent_dir, net_type=DQNetwork, import_replay=True, optimizer=torch.optim.RMSprop,
+             device=torch.device("cuda" if torch.cuda.is_available() else "cpu")):
+        return super().load(env, agent_dir, net_type=DQNetwork, import_replay=import_replay, optimizer=optimizer,
+                            device=device)
 
-
+    @classmethod
+    def get_agent_from_checkpoint(cls, checkpoint, net_type, optimizer, env, replay, device):
+        agent = cls(env, minibatch_size=checkpoint["minibatch_size"],
+                    C=checkpoint["C"],
+                    gamma=checkpoint["gamma"],
+                    loss=checkpoint["loss"],
+                    seed=checkpoint["seed"],
+                    device=device,
+                    optimizer_parameters=checkpoint["optimizer_parameters"])
+        agent.Q.load_state_dict(checkpoint["Q_state_dict"])
+        agent.Q_target.load_state_dict(checkpoint["Q_target_state_dict"])
+        agent.optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
+        agent.n_frames = checkpoint["n_frames"]
+        agent.clip_value = checkpoint["clip_value"]
+        agent.replay_memory = replay
+        return agent
