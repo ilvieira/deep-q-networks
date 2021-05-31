@@ -161,7 +161,7 @@ class DQNAgent(Agent):
             done = False
 
             while not done:
-                observation, rt = self.play_and_store_transition(observation)
+                observation, rt, done = self.play_and_store_transition(observation)
                 self.n_frames += 1
                 ep_frames += 1
                 total_reward += rt
@@ -218,7 +218,7 @@ class DQNAgent(Agent):
         next_observation, rt, done, _ = self.env.step(at)
         transition = (self.expand_obs(observation), at, rt, self.expand_obs(next_observation), done)
         self.replay_memory.append(transition)
-        return next_observation, rt
+        return next_observation, rt, done
 
     def update_target(self):
         self.Q_target = type(self.Q)(self.n_actions).to(self.device)
