@@ -50,7 +50,6 @@ class DQNAgent(Agent):
             else {"lr": 0.0025, "alpha": 0.95, "eps": 0.01}
 
         self.optimizer = optimizer(self.Q.parameters(), **optimizer_parameters)
-        self.clip_value = 1
 
         # initialize the replay memory
         self.replay_memory = replay
@@ -93,8 +92,9 @@ class DQNAgent(Agent):
             q_vals = self.Q(phi.to(self.device))
             action = self.policy.choose_action(q_vals.detach().cpu())
 
+            # the following was probably not needed:
             # remove prev_phi from the gpu to clear vram
-            phi.cpu()
+            # phi.cpu()
             return action
 
     # ================================================================================================================
@@ -285,7 +285,6 @@ class DQNAgent(Agent):
         parameters["C"] = self.C
         parameters["gamma"] = self.gamma
         parameters["minibatch_size"] = self.minibatch_size
-        parameters["clip_value"] = self.clip_value
         parameters["optimizer_class_name"] = self.optimizer.__class__.__name__
         parameters["optimizer_parameters"] = self.optimizer_parameters
         parameters["optimizer_state_dict"] = self.optimizer.state_dict()
@@ -357,7 +356,6 @@ class DQNAgent(Agent):
         agent.Q_target.load_state_dict(checkpoint["Q_target_state_dict"])
         agent.optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
         agent.n_frames = checkpoint["n_frames"]
-        agent.clip_value = checkpoint["clip_value"]
         return agent
 
     # ================================================================================================================
@@ -391,6 +389,7 @@ class DQNAtariAgent(DQNAgent):
                          update_frequency=4,
                          seed=seed,
                          device=device,
+                         optimizer=torch.optim.RMSprop,
                          optimizer_parameters=optimizer_parameters)
 
     def learn(self, save_dir, save_replay=True, store_stats=True, verbose=True, max_steps=50_000_000, max_time=604_800,
@@ -409,7 +408,7 @@ class DQNAtariAgent(DQNAgent):
 
     @classmethod
     def load(cls, env, agent_dir, net_type=DQNetwork, import_replay=True, optimizer=torch.optim.RMSprop,
-             device=torch.device("cuda" if torch.cuda.is_available() else "cpu")):
+             device=("cuda" if torch.cuda.is_available() else "cpu")):
         return super().load(env, agent_dir, net_type=DQNetwork, import_replay=import_replay, optimizer=optimizer,
                             device=device)
 
@@ -426,6 +425,5 @@ class DQNAtariAgent(DQNAgent):
         agent.Q_target.load_state_dict(checkpoint["Q_target_state_dict"])
         agent.optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
         agent.n_frames = checkpoint["n_frames"]
-        agent.clip_value = checkpoint["clip_value"]
         agent.replay_memory = replay
         return agent

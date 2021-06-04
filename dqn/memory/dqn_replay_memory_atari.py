@@ -9,7 +9,7 @@ from dqn.memory import compress_frames, decompress_as_np
 
 
 class DQNReplayMemoryAtari(ReplayMemory):
-    def __init__(self, size, device=torch.device("cuda" if torch.cuda.is_available() else "cpu")):
+    def __init__(self, size, device=("cuda" if torch.cuda.is_available() else "cpu")):
         super().__init__(size)
         self._phi = deque(maxlen=size+4)
         # because every phi is the set of 4 frames, and phi_next contains on extra frame
@@ -17,7 +17,7 @@ class DQNReplayMemoryAtari(ReplayMemory):
         self._actions = deque(maxlen=size)
         self._rewards = deque(maxlen=size)
         self._not_done = deque(maxlen=size)
-        self._device = device
+        self._device = torch.device(device)
 
     def append(self, transition):
         prev_phi = transition[0]

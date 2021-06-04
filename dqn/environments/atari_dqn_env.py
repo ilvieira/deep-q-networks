@@ -13,9 +13,8 @@ class AtariDNQEnv(Wrapper):
         sure that the game always starts."""
 
         self._train_env = EpisodicLifeEnv(NvidiaAtari2600Wrapper(env, channels_first=True))
-        self._eval_env = NoopResetEnv(
-                            NvidiaAtari2600Wrapper(env, max_reward_clip=np.inf, min_reward_clip=-np.inf,
-                                                   channels_first=True))
+        self._eval_env = NoopResetEnv(NvidiaAtari2600Wrapper(env, max_reward_clip=np.inf, min_reward_clip=-np.inf,
+                                                             channels_first=True))
 
         super().__init__(self._train_env)
 
@@ -26,6 +25,6 @@ class AtariDNQEnv(Wrapper):
         self.env = self._eval_env
 
     def restart(self):
-        # starts the game from the beginning (with all the lives lives)
+        # starts the game from the beginning (with all the lives)
         self.env.was_real_done = True
         self.reset()
