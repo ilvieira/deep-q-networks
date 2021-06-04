@@ -73,15 +73,7 @@ class DQNAgent(Agent):
     # Agent Methods
     # ================================================================================================================
 
-    def eval(self):
-        super().eval()
-        self.env.eval()
-        self.policy.eval()
 
-    def train(self):
-        super().train()
-        self.env.train()
-        self.policy.train()
 
     def action(self, observation: np.ndarray):
         """Chooses an action given an observation"""
@@ -201,6 +193,10 @@ class DQNAgent(Agent):
         with torch.no_grad():
             y = (r + self.gamma * not_done * self.Q_target(next_phi)
                  .max(axis=1, keepdim=True).values.view(self.minibatch_size))
+
+            print(self.Q_target(next_phi))
+            print(self.Q_target(next_phi).max(axis=1, keepdim=True).values)
+            print(y)
 
         q_vals = torch.zeros(self.minibatch_size).to(self.device)
         self.optimizer.zero_grad()
@@ -400,11 +396,15 @@ class DQNAtariAgent(DQNAgent):
 
     def eval(self):
         super().eval()
+        self.policy.eval()
+        self.env.eval()
         self.env.restart()
 
     def train(self):
         super().train()
-        self.env.restart()
+        self.env.train()
+        self.policy.train()
+
 
     @classmethod
     def load(cls, env, agent_dir, net_type=DQNetwork, import_replay=True, optimizer=torch.optim.RMSprop,
