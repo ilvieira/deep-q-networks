@@ -73,8 +73,6 @@ class DQNAgent(Agent):
     # Agent Methods
     # ================================================================================================================
 
-
-
     def action(self, observation: np.ndarray):
         """Chooses an action given an observation"""
         phi = torch.tensor(self.expand_obs(observation)).float()
@@ -404,7 +402,6 @@ class DQNAtariAgent(DQNAgent):
         super().train()
         self.env.train()
         self.policy.train()
-
 
     @classmethod
     def load(cls, env, agent_dir, net_type=DQNetwork, import_replay=True, optimizer=torch.optim.RMSprop,
