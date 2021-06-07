@@ -192,10 +192,6 @@ class DQNAgent(Agent):
             y = (r + self.gamma * not_done * self.Q_target(next_phi)
                  .max(axis=1, keepdim=True).values.view(self.minibatch_size))
 
-            print(self.Q_target(next_phi))
-            print(self.Q_target(next_phi).max(axis=1, keepdim=True).values)
-            print(y)
-
         q_vals = torch.zeros(self.minibatch_size).to(self.device)
         self.optimizer.zero_grad()
         q_phi = self.Q(prev_phi)
