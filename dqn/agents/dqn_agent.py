@@ -39,17 +39,14 @@ class DQNAgent(Agent):
         self.update_frequency = update_frequency
         self.C = C
 
-        # initialize Q and Q_target as a copy of Q
+        # initialize Q, Q_target as a copy of Q ant the gradient descent algorithm (optimizer)
         self.Q = net_type(self.n_actions).to(self.device)
         self.update_target()
+        self.setup_optimizer(optimizer, optimizer_parameters)
 
         # other parameters
         self.gamma = gamma
         self.minibatch_size = minibatch_size
-        self.optimizer_parameters = optimizer_parameters if optimizer_parameters is not None \
-            else {"lr": 0.0025, "alpha": 0.95, "eps": 0.01}
-
-        self.optimizer = optimizer(self.Q.parameters(), **optimizer_parameters)
 
         # initialize the replay memory
         self.replay_memory = replay
@@ -68,6 +65,11 @@ class DQNAgent(Agent):
         torch.manual_seed(seed)
         rnd.seed(seed)
         np.random.seed(seed)
+
+    def setup_optimizer(self, optimizer, optimizer_parameters):
+        self.optimizer_parameters = optimizer_parameters if optimizer_parameters is not None \
+            else {"lr": 0.0025, "alpha": 0.95, "eps": 0.01}
+        self.optimizer = optimizer(self.Q.parameters(), **optimizer_parameters)
 
     # ================================================================================================================
     # Agent Methods
@@ -330,7 +332,6 @@ class DQNAgent(Agent):
 
     @classmethod
     def get_agent_from_checkpoint(cls, checkpoint, net_type, optimizer, env, replay, device):
-        print("agent from checkpoint")
         agent = cls(env, replay, checkpoint["n_actions"], net_type,
                     minibatch_size=checkpoint["minibatch_size"],
                     optimizer=optimizer,
@@ -340,11 +341,14 @@ class DQNAgent(Agent):
                     loss=checkpoint["loss"],
                     policy=checkpoint["policy"],
                     seed=checkpoint["seed"],
-                    device=device,
-                    optimizer_parameters=checkpoint["optimizer_parameters"])
+                    device=device)
+
         agent.Q.load_state_dict(checkpoint["Q_state_dict"])
         agent.Q_target.load_state_dict(checkpoint["Q_target_state_dict"])
+
+        agent.setup_optimizer(optimizer, checkpoint["optimizer_parameters"])
         agent.optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
+
         agent.n_frames = checkpoint["n_frames"]
         return agent
 
@@ -363,9 +367,11 @@ class DQNAtariAgent(DQNAgent):
                  C=10_000,
                  gamma=0.99,
                  loss=clip_mse3,
+                 update_frequency=4,
                  seed=0,
                  device=("cuda" if torch.cuda.is_available() else "cpu"),
-                 optimizer_parameters=None):
+                 optimizer_parameters=None,
+                 policy=AtariDQNPolicy()):
         replay = DQNReplayMemoryAtari(replay_memory_size, device=device)
         env = AtariDNQEnv(env)
         optimizer_parameters = optimizer_parameters if optimizer_parameters is not None \
@@ -375,8 +381,8 @@ class DQNAtariAgent(DQNAgent):
                          C=C,
                          gamma=gamma,
                          loss=loss,
-                         policy=AtariDQNPolicy(),
-                         update_frequency=4,
+                         policy=policy,
+                         update_frequency=update_frequency,
                          seed=seed,
                          device=device,
                          optimizer=torch.optim.RMSprop,
@@ -413,10 +419,18 @@ class DQNAtariAgent(DQNAgent):
                     loss=checkpoint["loss"],
                     seed=checkpoint["seed"],
                     device=device,
-                    optimizer_parameters=checkpoint["optimizer_parameters"])
+                    optimizer_parameters=checkpoint["optimizer_parameters"],
+                    policy=checkpoint["policy"],
+                    update_frequency=checkpoint["update_frequency"])
+        print(agent.policy._train_policy.epsilon)
+        print(agent.update_frequency)
+
         agent.Q.load_state_dict(checkpoint["Q_state_dict"])
         agent.Q_target.load_state_dict(checkpoint["Q_target_state_dict"])
+
         agent.optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
+        agent.setup_optimizer(optimizer, checkpoint["optimizer_parameters"])
+
         agent.n_frames = checkpoint["n_frames"]
         agent.replay_memory = replay
         return agent
