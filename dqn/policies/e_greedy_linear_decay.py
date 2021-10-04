@@ -1,4 +1,4 @@
-from .e_greedy import EGreedy
+from dqn.policies.e_greedy import EGreedy
 
 
 class EGreedyLinearDecay(EGreedy):
