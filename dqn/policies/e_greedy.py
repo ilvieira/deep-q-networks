@@ -13,7 +13,7 @@ class EGreedy(Policy):
         self.random_policy = RandomPolicy(n_actions)
 
     def choose_action(self, Q=None):
-        """Q is an tensor with shape (N,), containing the Q values of the N possible actions"""
+        """Q is an tensor with shape (N,) or an ndarray, containing the Q values of the N possible actions"""
         p = rnd.uniform(0, 1)
 
         # with probability epsilon, choose a random action
