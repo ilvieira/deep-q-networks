@@ -13,3 +13,6 @@ The easiest way to make sure this package is properly installed is to create a n
 5. Follow the installation instructions (in the **Installation** section) from https://github.com/openai/baselines to install the atari baselines.
 
 
+## Notes on the versions of this project:
+ - 0.0.1 - Initial version of the project
+ - 0.1.0 - Added Q-learning
