@@ -27,6 +27,7 @@ class Agent(ABC):
             at = self.action(observation)
             observation, rt, done, _ = self.env.step(at)
             total_reward += rt
+        self.env.render()
         self.env.reset()
         return total_reward
 
