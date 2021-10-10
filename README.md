@@ -12,6 +12,8 @@ The easiest way to make sure this package is properly installed is to create a n
 4. Download the Roms from atari from https://github.com/openai/atari-py#roms and follow the instructions for **installation from source**.
 5. Follow the installation instructions (in the **Installation** section) from https://github.com/openai/baselines to install the atari baselines.
 
+## Installing from testpypi:
+```pip install --index-url https://test.pypi.org/simple/ --extra-index-url https://pypi.org/simple dqn=x.x.x```
 
 ## Notes on the versions of this project:
  - 0.0.1 - Initial version of the project

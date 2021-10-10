@@ -7,3 +7,5 @@ old/
 cuda-repo-ubuntu1804-10-2-local-10.2.89-440.33.01_1.0-1_amd64.deb
 scripts/
 Agents/
+dist/
+dqn.egg-info/
