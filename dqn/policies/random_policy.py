@@ -1,5 +1,7 @@
 from dqn.policies.policy import Policy
 import random as rnd
+import torch
+import numpy as np
 
 
 class RandomPolicy(Policy):
@@ -12,8 +14,16 @@ class RandomPolicy(Policy):
             return rnd.randrange(self.n_actions)
 
         # otherwise, get that information from the q-value vector
-        Q = Q.numpy()
-        N = Q.shape[1]
+        if torch.is_tensor(Q):
+            Q = Q.numpy()
+        elif not isinstance(Q, np.ndarray):
+            raise TypeError("The Q-values given must either be an ndarray or a torch Tensor, but an instance of"
+                            f"{type(Q)} was given instead.")
+
+        if len(Q.shape)>1:
+            N = Q.shape[1]
+        else:
+            N = Q.shape[0]
         return rnd.randrange(N)
 
 

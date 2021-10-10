@@ -2,6 +2,7 @@ from .policy import Policy
 from dqn.policies.random_policy import RandomPolicy
 import random as rnd
 import numpy as np
+import torch
 
 
 class EGreedy(Policy):
@@ -18,10 +19,22 @@ class EGreedy(Policy):
         # with probability epsilon, choose a random action
         if p < self.epsilon:
             return self.random_policy.choose_action(Q=Q)
+            print("random")
 
         # otherwise, choose one of the actions that maximizes the Q-value
-        Q = Q.numpy()
+
+        if torch.is_tensor(Q):
+            Q = Q.numpy()
+        elif not isinstance(Q, np.ndarray):
+            raise TypeError("The Q-values given must either be an ndarray or a torch Tensor, but an instance of"
+                            f"{type(Q)} was given instead.")
+
         vmax = np.amax(Q)
         possible_indices = np.where(Q == vmax)
+        if len(Q.shape)>1:
+            return np.random.choice(possible_indices[1])
+        else:
+            return np.random.choice(possible_indices[0])
+
         return np.random.choice(possible_indices[1])
 
