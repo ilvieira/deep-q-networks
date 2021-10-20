@@ -18,3 +18,4 @@ The easiest way to make sure this package is properly installed is to create a n
 ## Notes on the versions of this project:
  - 0.0.1 - Initial version of the project
  - 0.1.0 - Added Q-learning
+ - 0.1.1 - Fixed bug in last release (the file with the implemented QLearningAgent had not been added to the commit.)
