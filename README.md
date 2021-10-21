@@ -20,3 +20,4 @@ The easiest way to make sure this package is properly installed is to create a n
  - 0.1.0 - Added Q-learning
  - 0.1.1 - Fixed bug in last release (the file with the implemented QLearningAgent had not been added to the commit.)
  - 0.1.2 - Fixed a small issue with the q-learning algorithm and added a feature that allows it to count iterations as episodes or timesteps.
+ - 0.1.3 - Another small fix.
