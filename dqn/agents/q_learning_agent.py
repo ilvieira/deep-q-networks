@@ -60,7 +60,7 @@ class QLearningAgent(Agent):
             if not done:
                 state = next_state
             else:
-                state = self.env.reset()
+                state = self.obs_to_state_id(self.env.reset())
                 if self.episodic:
                     iteration += 1
 
