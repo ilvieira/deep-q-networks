@@ -22,3 +22,4 @@ The easiest way to make sure this package is properly installed is to create a n
  - 0.1.2 - Fixed a small issue with the q-learning algorithm and added a feature that allows it to count iterations as episodes or timesteps.
  - 0.1.3 - Another small fix.
  - 0.1.4 - Added an epsilon greedy policy with non-linear decay.
+ - 0.1.5 - Added yet another epsilon greedy policy, where the decay is done by steps: every few timesteps, the epsilon decays a value.
