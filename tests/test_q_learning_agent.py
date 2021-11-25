@@ -6,8 +6,8 @@ from dqn.policies.e_greedy_linear_decay import EGreedyLinearDecay
 randomness was removed, since even a human player has trouble reaching the goal if it is not."""
 
 env = FrozenLakeEnv(is_slippery=False)
-agent = QLearningAgent(env, env.nS, env.nA, 0.9, 0.5,
-                       train_policy=EGreedyLinearDecay(epsilon=1,min_epsilon=0.05, steps_of_decay=100))
+agent = QLearningAgent(env, env.nS, env.nA, 0.9, 0.5, episodic=True,
+                       train_policy=EGreedyLinearDecay(epsilon=1, min_epsilon=0.05, steps_of_decay=100))
 
 agent.learn(500)
 agent.play()
