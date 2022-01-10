@@ -11,9 +11,9 @@ class LinearDQN(nn.Module):
         # fully connected layers
         self.fc1 = nn.Linear(n_features, 64)
         self.fc2 = nn.Linear(64, 64)
-        self.fc4 = nn.Linear(64, number_of_actions)
+        self.fc3 = nn.Linear(64, number_of_actions)
 
     def forward(self, x):
         x = F.relu(self.fc1(x.view(-1, self.n_features)))
         x = F.relu(self.fc2(x))
-        return self.fc4(x)
+        return self.fc3(x)

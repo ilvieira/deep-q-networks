@@ -7,6 +7,7 @@ import time
 import matplotlib.pyplot as plt
 import pandas as pd
 from dqn.agents.networks.dqn import DQNetwork
+from dqn.agents.networks.linear_dqn import LinearDQN
 from dqn.agents.agent import Agent
 
 from dqn.memory.dqn_replay_memory_atari import DQNReplayMemoryAtari
@@ -29,9 +30,11 @@ class DQNAgent(Agent):
                  policy=AtariDQNPolicy(),
                  seed=0,
                  device="cuda" if torch.cuda.is_available() else "cpu",
-                 optimizer_parameters=None):
+                 optimizer_parameters=None,
+                 n_features=None):  # this parameter is only needed for the LinearDQN
 
         super().__init__(env, n_actions)
+        self.n_features = n_features
         self.device = torch.device(device)
         self.set_seed(seed)
 
@@ -39,8 +42,11 @@ class DQNAgent(Agent):
         self.update_frequency = update_frequency
         self.C = C
 
+        # as of now there are only two types of nets supported: LinearDQN and DQNetwork. This needs to be updated if
+        # more nets are implemented
+        self.net_parameters = [self.n_actions] if net_type == DQNetwork else [n_features, n_actions]
         # initialize Q, Q_target as a copy of Q ant the gradient descent algorithm (optimizer)
-        self.Q = net_type(self.n_actions).to(self.device)
+        self.Q = net_type(*self.net_parameters).to(self.device)
         self.update_target()
         self.setup_optimizer(optimizer, optimizer_parameters)
 
@@ -213,7 +219,7 @@ class DQNAgent(Agent):
         return next_observation, rt, done
 
     def update_target(self):
-        self.Q_target = type(self.Q)(self.n_actions).to(self.device)
+        self.Q_target = type(self.Q)(*self.net_parameters).to(self.device)
         self.Q_target.load_state_dict(self.Q.state_dict())
 
     # ================================================================================================================
@@ -271,6 +277,7 @@ class DQNAgent(Agent):
         parameters = dict()
         # parameters["env"] = self.env # as of now, there is no way to store the environment
         parameters["n_actions"] = self.n_actions
+        parameters["n_features"] = self.n_features
         parameters["seed"] = self.seed
         parameters["n_frames"] = self.n_frames
         parameters["update_frequency"] = self.update_frequency
@@ -341,7 +348,8 @@ class DQNAgent(Agent):
                     loss=checkpoint["loss"],
                     policy=checkpoint["policy"],
                     seed=checkpoint["seed"],
-                    device=device)
+                    device=device,
+                    n_features=checkpoint["n_features"])
 
         agent.Q.load_state_dict(checkpoint["Q_state_dict"])
         agent.Q_target.load_state_dict(checkpoint["Q_target_state_dict"])
