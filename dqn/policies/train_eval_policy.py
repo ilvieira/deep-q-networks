@@ -3,7 +3,9 @@ from dqn.policies.e_greedy_linear_decay import EGreedyLinearDecay
 from dqn.policies.e_greedy import EGreedy
 
 
-class AtariDQNPolicy(Policy):
+class TrainEvalPolicy(Policy):
+    """This policy contains two discting policies: one to be used for training a model and another to be used to
+    evaluate the trained model."""
 
     def __init__(self, eval_policy=EGreedy(epsilon=0.05),
                  train_policy=EGreedyLinearDecay(epsilon=1, min_epsilon=0.1, steps_of_decay=1_000_000),

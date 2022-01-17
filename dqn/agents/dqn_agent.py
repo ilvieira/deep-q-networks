@@ -12,7 +12,7 @@ from dqn.agents.agent import Agent
 
 from dqn.memory.dqn_replay_memory_atari import DQNReplayMemoryAtari
 from dqn.environments.atari_dqn_env import AtariDNQEnv
-from dqn.policies.atari_dqn_policy import AtariDQNPolicy
+from dqn.policies.train_eval_policy import TrainEvalPolicy
 from dqn.torch_extensions import clip_mse3
 from dqn.policies.random_policy import RandomPolicy
 
@@ -27,7 +27,7 @@ class DQNAgent(Agent):
                  update_frequency=1,
                  gamma=0.99,
                  loss=clip_mse3,
-                 policy=AtariDQNPolicy(),
+                 policy=TrainEvalPolicy(),
                  seed=0,
                  device="cuda" if torch.cuda.is_available() else "cpu",
                  optimizer_parameters=None,
@@ -193,12 +193,15 @@ class DQNAgent(Agent):
         if verbose:
             print("Done")
 
-    def optimize_model(self):
-        r, prev_phi, next_phi, not_done, actions = self.replay_memory.sample(self.minibatch_size)
-
+    def update_net(self, r, not_done, next_phi):
         with torch.no_grad():
             y = (r + self.gamma * not_done * self.Q_target(next_phi)
                  .max(axis=1, keepdim=True).values.view(self.minibatch_size))
+        return y
+
+    def optimize_model(self):
+        r, prev_phi, next_phi, not_done, actions = self.replay_memory.sample(self.minibatch_size)
+        y = self.update_net(r, not_done, next_phi)
 
         q_vals = torch.zeros(self.minibatch_size).to(self.device)
         self.optimizer.zero_grad()
@@ -325,7 +328,6 @@ class DQNAgent(Agent):
         if import_replay:
             with open(agent_dir + "replay.p", "rb") as replay_file:
                 replay = pickle.load(replay_file)
-                print(len(replay))
         else:
             replay = None
 
@@ -379,7 +381,7 @@ class DQNAtariAgent(DQNAgent):
                  seed=0,
                  device=("cuda" if torch.cuda.is_available() else "cpu"),
                  optimizer_parameters=None,
-                 policy=AtariDQNPolicy()):
+                 policy=TrainEvalPolicy()):
         replay = DQNReplayMemoryAtari(replay_memory_size, device=device)
         env = AtariDNQEnv(env)
         optimizer_parameters = optimizer_parameters if optimizer_parameters is not None \
@@ -430,8 +432,6 @@ class DQNAtariAgent(DQNAgent):
                     optimizer_parameters=checkpoint["optimizer_parameters"],
                     policy=checkpoint["policy"],
                     update_frequency=checkpoint["update_frequency"])
-        print(agent.policy._train_policy.epsilon)
-        print(agent.update_frequency)
 
         agent.Q.load_state_dict(checkpoint["Q_state_dict"])
         agent.Q_target.load_state_dict(checkpoint["Q_target_state_dict"])
