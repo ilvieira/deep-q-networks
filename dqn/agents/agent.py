@@ -15,7 +15,7 @@ class Agent(ABC):
     def eval(self):
         self._training = False
 
-    def play(self, render=True):
+    def play(self, render=True, reset_at_the_end=True):
         self.eval()
         observation = self.env.reset()
         done = False
@@ -28,7 +28,8 @@ class Agent(ABC):
             observation, rt, done, _ = self.env.step(at)
             total_reward += rt
         self.env.render()
-        self.env.reset()
+        if reset_at_the_end:
+            self.env.reset()
         return total_reward
 
     @abstractmethod

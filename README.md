@@ -24,4 +24,5 @@ The easiest way to make sure this package is properly installed is to create a n
  - 0.1.4 - Added an epsilon greedy policy with non-linear decay.
  - 0.1.5 - Added yet another epsilon greedy policy, where the decay is done by steps: every few timesteps, the epsilon decays a value.
  - 0.1.6 - Fixed issues with Linear DQNs and added a test example.
- - 0.2.0 - Added DoubleDQNAgent. Renamed the AtariDQNPolicy to a more general and appropriate name: TrainEvalPolicy. 
+ - 0.2.0 - Added DoubleDQNAgent. Renamed the AtariDQNPolicy to a more general and appropriate name: TrainEvalPolicy.
+ - 0.2.1 - Small modifications to make the agents more adaptable to other environments besides gym ones. 

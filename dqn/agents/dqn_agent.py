@@ -322,14 +322,14 @@ class DQNAgent(Agent):
 
     @classmethod
     def load(cls, env, agent_dir, net_type, import_replay=True, optimizer=torch.optim.RMSprop,
-             device=("cuda" if torch.cuda.is_available() else "cpu")):
+             device=("cuda" if torch.cuda.is_available() else "cpu"), replay=None):
         agent_dir = agent_dir if (agent_dir[-1] == '/' or agent_dir[-1] == '\\') else agent_dir + '/'
         checkpoint = torch.load(agent_dir + "agent.tar", map_location=device)
         if import_replay:
             with open(agent_dir + "replay.p", "rb") as replay_file:
                 replay = pickle.load(replay_file)
         else:
-            replay = None
+            replay = replay
 
         if net_type.__name__ != checkpoint["Q_class_name"]:
             raise ValueError(f"The networks for this agent are of the type '{checkpoint['Q_class_name']}', but there"
@@ -344,6 +344,7 @@ class DQNAgent(Agent):
         agent = cls(env, replay, checkpoint["n_actions"], net_type,
                     minibatch_size=checkpoint["minibatch_size"],
                     optimizer=optimizer,
+                    optimizer_parameters=checkpoint["optimizer_parameters"],
                     C=checkpoint["C"],
                     update_frequency=checkpoint["update_frequency"],
                     gamma=checkpoint["gamma"],
