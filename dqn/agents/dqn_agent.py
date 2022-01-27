@@ -7,7 +7,6 @@ import time
 import matplotlib.pyplot as plt
 import pandas as pd
 from dqn.agents.networks.dqn import DQNetwork
-from dqn.agents.networks.linear_dqn import LinearDQN
 from dqn.agents.agent import Agent
 
 from dqn.memory.dqn_replay_memory_atari import DQNReplayMemoryAtari
@@ -20,7 +19,7 @@ from dqn.policies.random_policy import RandomPolicy
 class DQNAgent(Agent):
     """ Class that simulates the game and trains the DQN """
 
-    def __init__(self, env, replay, n_actions, net_type,
+    def __init__(self, env, replay, n_actions, net_type, net_parameters,
                  minibatch_size=32,
                  optimizer=torch.optim.RMSprop,
                  C=10_000,
@@ -28,13 +27,12 @@ class DQNAgent(Agent):
                  gamma=0.99,
                  loss=clip_mse3,
                  policy=TrainEvalPolicy(),
+                 populate_policy=None,
                  seed=0,
                  device="cuda" if torch.cuda.is_available() else "cpu",
-                 optimizer_parameters=None,
-                 n_features=None):  # this parameter is only needed for the LinearDQN
+                 optimizer_parameters=None):  # this parameter is only needed for the LinearDQN
 
         super().__init__(env, n_actions)
-        self.n_features = n_features
         self.device = torch.device(device)
         self.set_seed(seed)
 
@@ -44,9 +42,9 @@ class DQNAgent(Agent):
 
         # as of now there are only two types of nets supported: LinearDQN and DQNetwork. This needs to be updated if
         # more nets are implemented
-        self.net_parameters = [self.n_actions] if net_type == DQNetwork else [n_features, n_actions]
+        self.net_parameters = net_parameters
         # initialize Q, Q_target as a copy of Q ant the gradient descent algorithm (optimizer)
-        self.Q = net_type(*self.net_parameters).to(self.device)
+        self.Q = net_type(**self.net_parameters).to(self.device)
         self.update_target()
         self.setup_optimizer(optimizer, optimizer_parameters)
 
@@ -57,6 +55,7 @@ class DQNAgent(Agent):
         # initialize the replay memory
         self.replay_memory = replay
         self.policy = policy
+        self.populate_policy = populate_policy if populate_policy is not None else RandomPolicy(self.n_actions)
         self.loss = loss
 
         # other auxiliary attributes:
@@ -89,11 +88,15 @@ class DQNAgent(Agent):
         with torch.no_grad():
             q_vals = self.Q(phi.to(self.device))
             action = self.policy.choose_action(q_vals.detach().cpu())
-
-            # the following was probably not needed:
-            # remove prev_phi from the gpu to clear vram
-            # phi.cpu()
             return action
+
+    def eval(self):
+        super().eval()
+        self.policy.eval()
+
+    def train(self):
+        super().train()
+        self.policy.train()
 
     # ================================================================================================================
     # DQN Specific Methods
@@ -101,8 +104,6 @@ class DQNAgent(Agent):
 
     def populate_replay_memory(self, n_samples, verbose=True):
         """ Adds the first transitions to the replay memory by playing the game with random actions"""
-        random_policy = RandomPolicy(self.n_actions)
-
         if verbose:
             print("Populating the replay memory...")
         start = time.time()
@@ -116,7 +117,7 @@ class DQNAgent(Agent):
             done = False
 
             while (not done) and transitions_added < n_samples:
-                at = random_policy.choose_action()
+                at = self.populate_policy.choose_action()
                 phi, rt, done, _ = self.env.step(at)
                 phi = self.expand_obs(phi)
                 transition = (prev_phi, at, rt, phi, done)
@@ -222,7 +223,7 @@ class DQNAgent(Agent):
         return next_observation, rt, done
 
     def update_target(self):
-        self.Q_target = type(self.Q)(*self.net_parameters).to(self.device)
+        self.Q_target = type(self.Q)(**self.net_parameters).to(self.device)
         self.Q_target.load_state_dict(self.Q.state_dict())
 
     # ================================================================================================================
@@ -278,9 +279,8 @@ class DQNAgent(Agent):
 
     def get_checkpoint(self):
         parameters = dict()
-        # parameters["env"] = self.env # as of now, there is no way to store the environment
+        parameters["net_parameters"] = self.net_parameters
         parameters["n_actions"] = self.n_actions
-        parameters["n_features"] = self.n_features
         parameters["seed"] = self.seed
         parameters["n_frames"] = self.n_frames
         parameters["update_frequency"] = self.update_frequency
@@ -341,7 +341,7 @@ class DQNAgent(Agent):
 
     @classmethod
     def get_agent_from_checkpoint(cls, checkpoint, net_type, optimizer, env, replay, device):
-        agent = cls(env, replay, checkpoint["n_actions"], net_type,
+        agent = cls(env, replay, checkpoint["n_actions"], net_type, checkpoint["net_parameters"],
                     minibatch_size=checkpoint["minibatch_size"],
                     optimizer=optimizer,
                     optimizer_parameters=checkpoint["optimizer_parameters"],
@@ -351,8 +351,7 @@ class DQNAgent(Agent):
                     loss=checkpoint["loss"],
                     policy=checkpoint["policy"],
                     seed=checkpoint["seed"],
-                    device=device,
-                    n_features=checkpoint["n_features"])
+                    device=device)
 
         agent.Q.load_state_dict(checkpoint["Q_state_dict"])
         agent.Q_target.load_state_dict(checkpoint["Q_target_state_dict"])
@@ -387,7 +386,7 @@ class DQNAtariAgent(DQNAgent):
         env = AtariDNQEnv(env)
         optimizer_parameters = optimizer_parameters if optimizer_parameters is not None \
             else {"lr": 0.0025, "alpha": 0.95, "eps": 0.01}
-        super().__init__(env, replay, env.action_space.n, DQNetwork,
+        super().__init__(env, replay, env.action_space.n, DQNetwork, [env.action_space.n],
                          minibatch_size=minibatch_size,
                          C=C,
                          gamma=gamma,
@@ -407,14 +406,12 @@ class DQNAtariAgent(DQNAgent):
 
     def eval(self):
         super().eval()
-        self.policy.eval()
         self.env.eval()
         self.env.restart()
 
     def train(self):
         super().train()
         self.env.train()
-        self.policy.train()
 
     @classmethod
     def load(cls, env, agent_dir, net_type=DQNetwork, import_replay=True, optimizer=torch.optim.RMSprop,
@@ -443,3 +440,5 @@ class DQNAtariAgent(DQNAgent):
         agent.n_frames = checkpoint["n_frames"]
         agent.replay_memory = replay
         return agent
+
+

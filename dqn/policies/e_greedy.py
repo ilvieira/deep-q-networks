@@ -19,22 +19,22 @@ class EGreedy(Policy):
         # with probability epsilon, choose a random action
         if p < self.epsilon:
             return self.random_policy.choose_action(Q=Q)
-            print("random")
 
-        # otherwise, choose one of the actions that maximizes the Q-value
-
+        # verify if Q is a tensor or numpy vector and in the first case, convert it to numpy
         if torch.is_tensor(Q):
             Q = Q.numpy()
         elif not isinstance(Q, np.ndarray):
             raise TypeError("The Q-values given must either be an ndarray or a torch Tensor, but an instance of"
                             f"{type(Q)} was given instead.")
+        Q_shape = Q.shape
+        if len(Q_shape) > 2 or (len(Q_shape) == 2 and Q_shape[0] > 1 and Q_shape[1] > 1):
+            raise ValueError(f"This policy can only handle one Q vector at a time. An array of shape {Q.shape} was "
+                             f"given as input instead.")
 
+        # choose one of the actions that maximizes the Q-value
+        Q = Q.flatten()
         vmax = np.amax(Q)
         possible_indices = np.where(Q == vmax)
-        if len(Q.shape)>1:
-            return np.random.choice(possible_indices[1])
-        else:
-            return np.random.choice(possible_indices[0])
+        return np.random.choice(possible_indices[0])
 
-        return np.random.choice(possible_indices[1])
 
