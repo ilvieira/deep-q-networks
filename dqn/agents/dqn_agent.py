@@ -128,13 +128,13 @@ class DQNAgent(Agent):
         if verbose:
             print(f"Done - {time.time() - start}s")
 
-    def learn(self, save_dir, save_replay=True, verbose=True, max_steps=50_000_000, max_time=604_800,
+    def learn(self, save_dir, save_replay=True, save_policy=True, verbose=True, max_steps=50_000_000, max_time=604_800,
               max_episodes=1_000_000_000, feedback_after_episodes=5, save_after_steps=1_000_000):
         """The algorithm as described in 'Human-level control through deep reinforcement learning'"""
         if verbose:
             print("Beginning the training stage...")
         start = time.time()
-        save_params = {"save_dir": save_dir, "save_replay": save_replay,
+        save_params = {"save_dir": save_dir, "save_replay": save_replay, "save_policy": save_policy,
                        "feedback_after_episodes": feedback_after_episodes}
         self.save(**save_params)
 
@@ -297,7 +297,7 @@ class DQNAgent(Agent):
         parameters["policy"] = self.policy
         return parameters
 
-    def save(self, save_dir, save_replay=True, feedback_after_episodes=1):
+    def save(self, save_dir, save_replay=True, save_policy=True, feedback_after_episodes=1):
         agent_dir = save_dir if (save_dir[-1] == '/' or save_dir[-1] == '\\') else save_dir + '/'
         stats_dir = agent_dir + "stats.csv"
         if not os.path.exists(agent_dir):
@@ -305,6 +305,8 @@ class DQNAgent(Agent):
 
         # Save this agent
         checkpoint = self.get_checkpoint()
+        if not save_policy:
+            checkpoint.pop("policy")
         torch.save(checkpoint, agent_dir + "agent.tar")
 
         # Save the statistics of the learning stage
@@ -322,7 +324,7 @@ class DQNAgent(Agent):
 
     @classmethod
     def load(cls, env, agent_dir, net_type, import_replay=True, optimizer=torch.optim.RMSprop,
-             device=("cuda" if torch.cuda.is_available() else "cpu"), replay=None):
+             device=("cuda" if torch.cuda.is_available() else "cpu"), replay=None, policy=None):
         agent_dir = agent_dir if (agent_dir[-1] == '/' or agent_dir[-1] == '\\') else agent_dir + '/'
         checkpoint = torch.load(agent_dir + "agent.tar", map_location=device)
         if import_replay:
@@ -337,10 +339,10 @@ class DQNAgent(Agent):
         if optimizer.__name__ != checkpoint["optimizer_class_name"]:
             raise ValueError(f"The optimizer for this agent is of the type '{checkpoint['optimizer_class_name']}', but"
                              + f" there was attempt to load it using an optimizer of the type '{optimizer}'.")
-        return cls.get_agent_from_checkpoint(checkpoint, net_type, optimizer, env, replay, device)
+        return cls.get_agent_from_checkpoint(checkpoint, net_type, optimizer, env, replay, policy, device)
 
     @classmethod
-    def get_agent_from_checkpoint(cls, checkpoint, net_type, optimizer, env, replay, device):
+    def get_agent_from_checkpoint(cls, checkpoint, net_type, optimizer, env, replay, policy, device):
         agent = cls(env, replay, checkpoint["n_actions"], net_type, checkpoint["net_parameters"],
                     minibatch_size=checkpoint["minibatch_size"],
                     optimizer=optimizer,
@@ -349,9 +351,12 @@ class DQNAgent(Agent):
                     update_frequency=checkpoint["update_frequency"],
                     gamma=checkpoint["gamma"],
                     loss=checkpoint["loss"],
-                    policy=checkpoint["policy"],
+                    policy=policy,
                     seed=checkpoint["seed"],
                     device=device)
+
+        if policy is None and "policy" in checkpoint:
+            agent.policy = checkpoint["policy"]
 
         agent.Q.load_state_dict(checkpoint["Q_state_dict"])
         agent.Q_target.load_state_dict(checkpoint["Q_target_state_dict"])
@@ -386,7 +391,7 @@ class DQNAtariAgent(DQNAgent):
         env = AtariDNQEnv(env)
         optimizer_parameters = optimizer_parameters if optimizer_parameters is not None \
             else {"lr": 0.0025, "alpha": 0.95, "eps": 0.01}
-        super().__init__(env, replay, env.action_space.n, DQNetwork, [env.action_space.n],
+        super().__init__(env, replay, env.action_space.n, DQNetwork, {"number_of_actions":env.action_space.n},
                          minibatch_size=minibatch_size,
                          C=C,
                          gamma=gamma,
@@ -415,12 +420,12 @@ class DQNAtariAgent(DQNAgent):
 
     @classmethod
     def load(cls, env, agent_dir, net_type=DQNetwork, import_replay=True, optimizer=torch.optim.RMSprop,
-             device=("cuda" if torch.cuda.is_available() else "cpu")):
+             device=("cuda" if torch.cuda.is_available() else "cpu"), replay=None, policy=None):
         return super().load(env, agent_dir, net_type=DQNetwork, import_replay=import_replay, optimizer=optimizer,
-                            device=device)
+                            device=device, replay=replay, policy=policy)
 
     @classmethod
-    def get_agent_from_checkpoint(cls, checkpoint, net_type, optimizer, env, replay, device):
+    def get_agent_from_checkpoint(cls, checkpoint, net_type, optimizer, env, replay, policy, device):
         agent = cls(env, minibatch_size=checkpoint["minibatch_size"],
                     C=checkpoint["C"],
                     gamma=checkpoint["gamma"],
@@ -428,8 +433,11 @@ class DQNAtariAgent(DQNAgent):
                     seed=checkpoint["seed"],
                     device=device,
                     optimizer_parameters=checkpoint["optimizer_parameters"],
-                    policy=checkpoint["policy"],
+                    policy=policy,
                     update_frequency=checkpoint["update_frequency"])
+
+        if policy is None and "policy" in checkpoint:
+            agent.policy = checkpoint["policy"]
 
         agent.Q.load_state_dict(checkpoint["Q_state_dict"])
         agent.Q_target.load_state_dict(checkpoint["Q_target_state_dict"])

@@ -9,10 +9,10 @@ save_dir = os.getcwd()+"/Agents/pong_demo"
 # agent = DoubleDQNAtariAgent(env, replay_memory_size=1_000_000, C=10_000)
 agent = DQNAtariAgent(env, replay_memory_size=100_000, C=10_000)
 
-agent.populate_replay_memory(50_000)
+#agent.populate_replay_memory(50_000)
 
 # Learning stage
-agent.learn(save_dir, save_after_steps=200_000, max_steps=5_000_000, max_time=2*24*3600, feedback_after_episodes=100)
+agent.learn(save_dir, save_after_steps=200_000, max_steps=2_000_000, max_time=2*24*3600, feedback_after_episodes=100)
 
 
 input(" Press enter to watch the agent play")

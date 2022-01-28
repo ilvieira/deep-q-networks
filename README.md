@@ -26,3 +26,4 @@ The easiest way to make sure this package is properly installed is to create a n
  - 0.1.6 - Fixed issues with Linear DQNs and added a test example.
  - 0.2.0 - Added DoubleDQNAgent. Renamed the AtariDQNPolicy to a more general and appropriate name: TrainEvalPolicy.
  - 0.2.1 - Small modifications to make the agents more adaptable to other environments besides gym ones. 
+ - 0.3.0 - LinearDQN is now implemented as GeneralLinearDQN was. Updates were made in the DQNAgent and DoubleDQNAgent.

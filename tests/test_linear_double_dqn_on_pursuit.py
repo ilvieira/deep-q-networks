@@ -9,7 +9,7 @@ from torch.nn.functional import mse_loss
 
 
 env = Pursuit(teammates="teammate aware", features="relative agent")
-save_dir = os.getcwd()+"/Agents/double_pursuit_test_debug"
+save_dir = os.getcwd()+"/Agents/double_pursuit_test"
 replay = DQNReplayMemory(100_000)
 policy = TrainEvalPolicy(eval_policy=EGreedy(epsilon=0),
                          train_policy=EGreedyLinearDecay(epsilon=0.5, min_epsilon=0.05, steps_of_decay=5_000))
@@ -25,5 +25,5 @@ agent.populate_replay_memory(1_000)
 # Learning stage
 agent.learn(save_dir, save_after_steps=500, max_steps=7_500, max_time=24*3600, feedback_after_episodes=50)
 
-#input(" Press enter to watch the agent play")
-#agent.play()
+input(" Press enter to watch the agent play")
+agent.play()
