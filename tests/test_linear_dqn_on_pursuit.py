@@ -1,7 +1,7 @@
 from dqn.agents.dqn_agent import DQNAgent
 from dqn.memory.dqn_replay_memory import DQNReplayMemory
 from dqn.policies.train_eval_policy import TrainEvalPolicy, EGreedyLinearDecay, EGreedy
-from dqn.agents.networks.linear_dqn import LinearDQN
+from dqn.agents.networks.custom_linear_dqn import CustomLinearDQN
 from examples.pursuit.environment.Pursuit import Pursuit
 import os
 import torch
@@ -12,8 +12,8 @@ save_dir = os.getcwd()+"/Agents/pursuit_test"
 replay = DQNReplayMemory(100_000)
 policy = TrainEvalPolicy(eval_policy=EGreedy(epsilon=0),
                          train_policy=EGreedyLinearDecay(epsilon=0.5, min_epsilon=0.05, steps_of_decay=5_000))
-agent = DQNAgent(env, replay, env.num_actions, LinearDQN,
-                 {"n_features": env.num_features, "n_actions": env.num_actions, "n_hidden_layers": 2},
+agent = DQNAgent(env, replay, env.num_actions, CustomLinearDQN,
+                 {"n_features": env.num_features, "n_actions": env.num_actions},
                  C=1, gamma=0.95, policy=policy,
                  optimizer=torch.optim.Adam, optimizer_parameters={"lr": 0.001}, loss=mse_loss)
 
