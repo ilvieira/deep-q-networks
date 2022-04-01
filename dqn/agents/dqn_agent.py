@@ -74,7 +74,7 @@ class DQNAgent(Agent):
     def setup_optimizer(self, optimizer, optimizer_parameters):
         self.optimizer_parameters = optimizer_parameters if optimizer_parameters is not None \
             else {"lr": 0.0025, "alpha": 0.95, "eps": 0.01}
-        self.optimizer = optimizer(self.Q.parameters(), **optimizer_parameters)
+        self.optimizer = optimizer(self.Q.parameters(), **self.optimizer_parameters)
 
     # ================================================================================================================
     # Agent Methods
