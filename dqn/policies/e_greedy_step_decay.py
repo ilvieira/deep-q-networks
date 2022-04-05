@@ -19,6 +19,7 @@ class EGreedyStepDecay(EGreedy):
         # update the epsilon in the initial decay phase
         if self.epsilon > self.min_epsilon and self.decay_frequency == 0:
             self.epsilon -= self.decay
+            self.epsilon = max(self.min_epsilon, self.epsilon)
             self.decay_frequency = self.timesteps_before_decay
 
         return action_index
