@@ -73,7 +73,7 @@ class DQNAgent(Agent):
 
     def setup_optimizer(self, optimizer, optimizer_parameters):
         self.optimizer_parameters = optimizer_parameters if optimizer_parameters is not None \
-            else {"lr": 0.0025, "alpha": 0.95, "eps": 0.01}
+            else {"lr": 0.00025, "alpha": 0.95, "eps": 0.01}
         self.optimizer = optimizer(self.Q.parameters(), **self.optimizer_parameters)
 
     # ================================================================================================================
@@ -390,7 +390,7 @@ class DQNAtariAgent(DQNAgent):
         replay = DQNReplayMemoryAtari(replay_memory_size, device=device)
         env = AtariDNQEnv(env)
         optimizer_parameters = optimizer_parameters if optimizer_parameters is not None \
-            else {"lr": 0.0025, "alpha": 0.95, "eps": 0.01}
+            else {"lr": 0.00025, "alpha": 0.95, "eps": 0.01}
         super().__init__(env, replay, env.action_space.n, DQNetwork, {"number_of_actions":env.action_space.n},
                          minibatch_size=minibatch_size,
                          C=C,
