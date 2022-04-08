@@ -29,3 +29,4 @@ The easiest way to make sure this package is properly installed is to create a n
  - 0.3.0 - LinearDQN is now implemented as GeneralLinearDQN was. Updates were made in the DQNAgent and DoubleDQNAgent.
  - 0.4.0 - CustomLinearDQN added. In a later update it will completely replace LinearDQN. DoubleDQNAgent readded. Apparently it had been removed by accident in the previous version.
  - 0.4.1 - Bugfix in DQNAgent.
+ - 0.4.2 - Changed the name if the class AtariDNQEnv to the intended name AtariDQNEnv

@@ -5,7 +5,7 @@ with open("README.md", "r") as fh:
 
 setup(
     name='dqn',
-    version='0.4.1',
+    version='0.4.2',
     description='Deep Q-Networks with Pytorch',
     long_description=long_description,
     long_description_content_type="text/markdown",
