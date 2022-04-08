@@ -5,7 +5,7 @@ from gym import Wrapper, Env
 import numpy as np
 
 
-class AtariDNQEnv(Wrapper):
+class AtariDQNEnv(Wrapper):
 
     def __init__(self, env: Union[Env, Wrapper, str]):
         # starts in train mode

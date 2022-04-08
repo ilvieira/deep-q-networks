@@ -10,7 +10,7 @@ from dqn.agents.networks.dqn import DQNetwork
 from dqn.agents.agent import Agent
 
 from dqn.memory.dqn_replay_memory_atari import DQNReplayMemoryAtari
-from dqn.environments.atari_dqn_env import AtariDNQEnv
+from dqn.environments.atari_dqn_env import AtariDQNEnv
 from dqn.policies.train_eval_policy import TrainEvalPolicy
 from dqn.torch_extensions import clip_mse3
 from dqn.policies.random_policy import RandomPolicy
@@ -388,7 +388,7 @@ class DQNAtariAgent(DQNAgent):
                  optimizer_parameters=None,
                  policy=TrainEvalPolicy()):
         replay = DQNReplayMemoryAtari(replay_memory_size, device=device)
-        env = AtariDNQEnv(env)
+        env = AtariDQNEnv(env)
         optimizer_parameters = optimizer_parameters if optimizer_parameters is not None \
             else {"lr": 0.00025, "alpha": 0.95, "eps": 0.01}
         super().__init__(env, replay, env.action_space.n, DQNetwork, {"number_of_actions":env.action_space.n},
