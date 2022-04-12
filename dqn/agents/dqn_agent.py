@@ -202,6 +202,7 @@ class DQNAgent(Agent):
                 # Evaluate the agent. After that bring it back to train mode:
                 if self.n_frames % eval_after_steps == 0:
                     self.eval_round(save_dir, eval_episodes)
+                    self.train()
 
                 # PERSISTENCE: Save after each save_after_steps_frame
                 if self.n_frames > 0 and self.n_frames % save_after_steps == 0:
