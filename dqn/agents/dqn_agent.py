@@ -61,6 +61,7 @@ class DQNAgent(Agent):
         # other auxiliary attributes:
         self._points_per_episode = []
         self._frames_per_episode = []
+        self.best_eval_average = float('-inf')
 
     # ================================================================================================================
     # Setup Methods
@@ -128,8 +129,32 @@ class DQNAgent(Agent):
         if verbose:
             print(f"Done - {time.time() - start}s")
 
+    def eval_round(self, save_dir, eval_episodes):
+        """Used to evaluate the agent. Makes the agent play eval_episodes games in eval mode and stores its
+        statistics."""
+        eval_results = [self.play(render=False) for _ in range(eval_episodes)]
+        std = np.std(eval_results)
+        avg = np.average(eval_results)
+
+        agent_dir = save_dir if (save_dir[-1] == '/' or save_dir[-1] == '\\') else save_dir + '/'
+        eval_stats_path = agent_dir + f"eval_stats_{eval_episodes}_eps.csv"
+
+        if not os.path.exists(eval_stats_path):
+            with open(eval_stats_path, "w") as stats_file:
+                label_line = "frames,avg,std"+"".join([f",ep{str(i)}" for i in range(1, eval_episodes+1)])
+                stats_file.write(label_line)
+
+        with open(eval_stats_path, "a") as stats_file:
+            line = f"\n{self.n_frames},{avg},{std}"+"".join([f",{str(eval_result)}" for eval_result in eval_results])
+            stats_file.write(line)
+
+        if self.best_eval_average < avg:
+            self.best_eval_average = avg
+            self.save(agent_dir+"best", save_replay=False, save_policy=False, save_train_stats=False)
+
     def learn(self, save_dir, save_replay=True, save_policy=True, verbose=True, max_steps=50_000_000, max_time=604_800,
-              max_episodes=1_000_000_000, feedback_after_episodes=5, save_after_steps=1_000_000):
+              max_episodes=1_000_000_000, feedback_after_episodes=5, save_after_steps=1_000_000,
+              eval_after_steps=250_000, eval_episodes=30):
         """The algorithm as described in 'Human-level control through deep reinforcement learning'"""
         if verbose:
             print("Beginning the training stage...")
@@ -174,8 +199,14 @@ class DQNAgent(Agent):
                 if self.n_frames % self.C == 0:
                     self.update_target()
 
+                # Evaluate the agent. After that bring it back to train mode:
+                if self.n_frames % eval_after_steps == 0:
+                    self.eval_round(save_dir, eval_episodes)
+
                 # PERSISTENCE: Save after each save_after_steps_frame
                 if self.n_frames > 0 and self.n_frames % save_after_steps == 0:
+                    # eval current agent
+
                     self.save(**save_params)
                     if verbose:
                         print(f"Agent saved ({self.n_frames} steps)")
@@ -263,7 +294,17 @@ class DQNAgent(Agent):
         fig.savefig(plot_dir + ".png")
         plt.close()
 
-    def save_stats(self, stats_dir):
+    def save_eval_stats(self, stats_dir):
+        if self.n_frames == 0:
+            with open(stats_dir, "w") as stats_file:
+                stats_file.write("Reward,Frames")
+        with open(stats_dir, "a") as stats_file:
+            for i in range(len(self._points_per_episode)):
+                stats_file.write(f"\n{self._points_per_episode[i]},{self._frames_per_episode[i]}")
+        self._frames_per_episode = []
+        self._points_per_episode = []
+
+    def save_train_stats(self, stats_dir):
         if self.n_frames == 0:
             with open(stats_dir, "w") as stats_file:
                 stats_file.write("Reward,Frames")
@@ -295,9 +336,10 @@ class DQNAgent(Agent):
         parameters["Q_target_state_dict"] = self.Q_target.state_dict()
         parameters["loss"] = self.loss
         parameters["policy"] = self.policy
+        parameters["best_eval_average"] = self.best_eval_average
         return parameters
 
-    def save(self, save_dir, save_replay=True, save_policy=True, feedback_after_episodes=1):
+    def save(self, save_dir, save_replay=True, save_policy=True, save_train_stats=True, feedback_after_episodes=1):
         agent_dir = save_dir if (save_dir[-1] == '/' or save_dir[-1] == '\\') else save_dir + '/'
         stats_dir = agent_dir + "stats.csv"
         if not os.path.exists(agent_dir):
@@ -310,12 +352,13 @@ class DQNAgent(Agent):
         torch.save(checkpoint, agent_dir + "agent.tar")
 
         # Save the statistics of the learning stage
-        self.save_stats(stats_dir)
+        if save_train_stats:
+            self.save_train_stats(stats_dir)
 
-        # Recover the recent statistics and the ones that were already stored in the stats.csv file. Use them to build a
-        # plot of the progress during the learning stage
-        stats = pd.read_csv(stats_dir)["Reward"]
-        self.plot_results(feedback_after_episodes, stats, f"{agent_dir}{self.n_frames}_steps")
+            # Recover the recent statistics and the ones that were already stored in the stats.csv file. Use them to build a
+            # plot of the progress during the learning stage
+            stats = pd.read_csv(stats_dir)["Reward"]
+            self.plot_results(feedback_after_episodes, stats, f"{agent_dir}{self.n_frames}_steps")
 
         # Save the replay memory
         if save_replay:
@@ -365,6 +408,7 @@ class DQNAgent(Agent):
         agent.optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
 
         agent.n_frames = checkpoint["n_frames"]
+        agent.best_eval_average = checkpoint["best_eval_average"]
         return agent
 
     # ================================================================================================================
