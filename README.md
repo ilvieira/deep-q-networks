@@ -31,3 +31,4 @@ The easiest way to make sure this package is properly installed is to create a n
  - 0.4.1 - Bugfix in DQNAgent.
  - 0.4.2 - Changed the name if the class AtariDNQEnv to the intended name AtariDQNEnv
  - 0.4.3 - Added evaluation episodes, like in the original deep mind article. The best performing agent is saved.
+ - 0.4.4 - Fixed bug from the previous version.
