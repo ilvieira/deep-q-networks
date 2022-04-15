@@ -449,10 +449,12 @@ class DQNAtariAgent(DQNAgent):
                          optimizer_parameters=optimizer_parameters)
 
     def learn(self, save_dir, save_replay=True, store_stats=True, verbose=True, max_steps=50_000_000, max_time=604_800,
-              max_episodes=1_000_000_000, feedback_after_episodes=5, save_after_steps=1_000_000, ):
+              max_episodes=1_000_000_000, feedback_after_episodes=5, save_after_steps=1_000_000,
+              eval_after_steps=250_000, eval_episodes=30):
         return super().learn(save_dir, save_replay=True, verbose=verbose, max_steps=max_steps, max_time=max_time,
                              max_episodes=max_episodes, feedback_after_episodes=feedback_after_episodes,
-                             save_after_steps=save_after_steps)
+                             save_after_steps=save_after_steps, eval_after_steps=eval_after_steps,
+                             eval_episodes=eval_episodes)
 
     def eval(self):
         super().eval()
