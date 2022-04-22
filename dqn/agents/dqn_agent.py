@@ -30,7 +30,8 @@ class DQNAgent(Agent):
                  populate_policy=None,
                  seed=0,
                  device="cuda" if torch.cuda.is_available() else "cpu",
-                 optimizer_parameters=None):  # this parameter is only needed for the LinearDQN
+                 optimizer_parameters=None,
+                 avg_loss_per_steps=1000):  # this parameter is only needed for the LinearDQN
 
         super().__init__(env, n_actions)
         self.device = torch.device(device)
@@ -62,6 +63,10 @@ class DQNAgent(Agent):
         self._points_per_episode = []
         self._frames_per_episode = []
         self.best_eval_average = float('-inf')
+
+        # the average of the loss per timestep for each episode
+        self._avg_losses = []
+        self._avg_loss_per_steps = avg_loss_per_steps
 
     # ================================================================================================================
     # Setup Methods
@@ -166,6 +171,7 @@ class DQNAgent(Agent):
         self.train()
         total_reward = 0
         max_reward = float('-inf')
+        losses = []
 
         for episode in range(max_episodes):
             ep_reward = 0
@@ -191,9 +197,14 @@ class DQNAgent(Agent):
                 total_reward += rt
                 ep_reward += rt
 
+                if len(losses) == self._avg_loss_per_steps:
+                    avg_loss = sum(losses)/self._avg_loss_per_steps
+                    self._avg_losses.append(avg_loss)
+                    losses = []
+
                 # Backpropagation at each update_frequency frames
                 if self.n_frames % self.update_frequency == 0:
-                    self.optimize_model()
+                    losses.append(self.optimize_model())
 
                 # Update target network at each C frames
                 if self.n_frames % self.C == 0:
@@ -203,6 +214,7 @@ class DQNAgent(Agent):
                 if self.n_frames % eval_after_steps == 0:
                     self.eval_round(save_dir, eval_episodes)
                     self.train()
+                    done = True
 
                 # PERSISTENCE: Save after each save_after_steps_frame
                 if self.n_frames > 0 and self.n_frames % save_after_steps == 0:
@@ -246,6 +258,7 @@ class DQNAgent(Agent):
         loss = self.loss(q_vals, y.float())
         loss.backward()
         self.optimizer.step()
+        return loss
 
     def play_and_store_transition(self, observation):
         at = self.action(observation)
@@ -262,16 +275,17 @@ class DQNAgent(Agent):
     # Statistics and Plot Methods
     # ================================================================================================================
 
-    def get_results(self, feedback_after_episodes, values, mode="avg"):
+    def get_reward_stats(self, feedback_after_episodes, values, mode="avg"):
         """Mode should either be max or avg or simple"""
         if mode == "simple":
             return values, range(len(values)), "Points per episode"
 
         func = max if mode == "max" else lambda x: sum(x) / len(x) if mode == "avg" else None
         caption = f"Average points over the last {feedback_after_episodes} episodes" if mode == "avg" \
-            else f"Maximum points over the last {feedback_after_episodes} episodes" if mode == "max" else None
+            else f"Maximum points over the last {feedback_after_episodes} episodes" if mode == "max" \
+            else None
         if func is None:
-            raise (ValueError("mode attribute should either be 'simple', 'max' or 'avg'."))
+            raise (ValueError("mode attribute should either be 'max' or 'avg'."))
 
         vals = []
         for i in range(feedback_after_episodes, len(values)):
@@ -279,14 +293,22 @@ class DQNAgent(Agent):
             vals.append(func(last_vals))
         return vals, range(feedback_after_episodes, len(values)), caption
 
-    def plot_results(self, feedback_after_episodes, values, plot_dir, modes=None):
-        colors = ['b', 'r', 'g']
+    def plot_avg_losses(self, losses, plot_dir):
+        fig, ax = plt.subplots()
+        updates = self._avg_loss_per_steps*np.arange(1, len(losses)+1)
+        ax.plot(updates, losses)
+        ax.set(xlabel="number of updates", title = f"Average loss over each {self._avg_loss_per_steps} updates")
+        fig.savefig(plot_dir + ".png")
+        plt.close()
+
+    def plot_rewards_results(self, feedback_after_episodes, values, plot_dir, modes=None):
+        colors = ['b', 'r']
         i = 0
         if modes is None:
             modes = ['avg', 'max']
         fig, ax = plt.subplots()
         for mode in modes:
-            y, x, caption = self.get_results(feedback_after_episodes, values, mode)
+            y, x, caption = self.get_reward_stats(feedback_after_episodes, values, mode)
             ax.plot(x, y, colors[i], label=caption)
             i += 1
 
@@ -305,15 +327,23 @@ class DQNAgent(Agent):
         self._frames_per_episode = []
         self._points_per_episode = []
 
-    def save_train_stats(self, stats_dir):
+    def save_train_stats(self, ep_stats_dir, losses_stats_dir):
         if self.n_frames == 0:
-            with open(stats_dir, "w") as stats_file:
+            with open(ep_stats_dir, "w") as stats_file:
                 stats_file.write("Reward,Frames")
-        with open(stats_dir, "a") as stats_file:
+            with open(losses_stats_dir, "w") as losses_file:
+                losses_file.write("Losses")
+
+        with open(ep_stats_dir, "a") as stats_file:
             for i in range(len(self._points_per_episode)):
                 stats_file.write(f"\n{self._points_per_episode[i]},{self._frames_per_episode[i]}")
+        with open(losses_stats_dir, "a") as losses_file:
+            for loss in self._avg_losses:
+                losses_file.write(f"\n{loss}")
+
         self._frames_per_episode = []
         self._points_per_episode = []
+        self._avg_losses = []
 
     # ================================================================================================================
     # Persistence Methods
@@ -338,11 +368,14 @@ class DQNAgent(Agent):
         parameters["loss"] = self.loss
         parameters["policy"] = self.policy
         parameters["best_eval_average"] = self.best_eval_average
+        parameters["avg_loss_per_steps"] = self._avg_loss_per_steps
+        parameters["avg_losses"] = self._avg_losses
         return parameters
 
     def save(self, save_dir, save_replay=True, save_policy=True, save_train_stats=True, feedback_after_episodes=1):
         agent_dir = save_dir if (save_dir[-1] == '/' or save_dir[-1] == '\\') else save_dir + '/'
-        stats_dir = agent_dir + "stats.csv"
+        ep_stats_dir = agent_dir + "episodes_stats.csv"
+        losses_stats_dir = agent_dir + "losses_stats.csv"
         if not os.path.exists(agent_dir):
             os.makedirs(agent_dir)
 
@@ -354,12 +387,23 @@ class DQNAgent(Agent):
 
         # Save the statistics of the learning stage
         if save_train_stats:
-            self.save_train_stats(stats_dir)
+            self.save_train_stats(ep_stats_dir, losses_stats_dir)
 
-            # Recover the recent statistics and the ones that were already stored in the stats.csv file. Use them to build a
-            # plot of the progress during the learning stage
-            stats = pd.read_csv(stats_dir)["Reward"]
-            self.plot_results(feedback_after_episodes, stats, f"{agent_dir}{self.n_frames}_steps")
+            avg_plot_dir = f"{agent_dir}avg_reward_plots/"
+            max_plot_dir = f"{agent_dir}max_reward_plots/"
+            losses_plot_dir = f"{agent_dir}loss_plots/"
+
+            os.makedirs(avg_plot_dir, exist_ok=True)
+            os.makedirs(max_plot_dir, exist_ok=True)
+            os.makedirs(losses_plot_dir, exist_ok=True)
+
+            reward_stats = pd.read_csv(ep_stats_dir)["Reward"]
+            losses_stats = pd.read_csv(losses_stats_dir)["Losses"]
+            self.plot_rewards_results(feedback_after_episodes, reward_stats, f"{avg_plot_dir}{self.n_frames}_steps",
+                                      modes=["avg"])
+            self.plot_rewards_results(feedback_after_episodes, reward_stats, f"{max_plot_dir}{self.n_frames}_steps",
+                                      modes=["max"])
+            self.plot_avg_losses(losses_stats, f"{losses_plot_dir}{self.n_frames}_steps")
 
         # Save the replay memory
         if save_replay:
@@ -397,7 +441,8 @@ class DQNAgent(Agent):
                     loss=checkpoint["loss"],
                     policy=policy,
                     seed=checkpoint["seed"],
-                    device=device)
+                    device=device,
+                    avg_loss_per_steps=checkpoint["avg_loss_per_steps"])
 
         if policy is None and "policy" in checkpoint:
             agent.policy = checkpoint["policy"]
@@ -410,6 +455,7 @@ class DQNAgent(Agent):
 
         agent.n_frames = checkpoint["n_frames"]
         agent.best_eval_average = checkpoint["best_eval_average"]
+        agent._avg_losses = checkpoint["avg_losses"]
         return agent
 
     # ================================================================================================================
