@@ -33,3 +33,4 @@ The easiest way to make sure this package is properly installed is to create a n
  - 0.4.3 - Added evaluation episodes, like in the original deep mind article. The best performing agent is saved.
  - 0.4.4 - Fixed bug from the previous version.
  - 0.4.5 - The number of eval episodes and time between eval stages can now be manually set for DQN and DoubleDQN with atari games.
+ - 0.4.6 - Plots for the loss are now stored.
