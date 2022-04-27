@@ -256,9 +256,10 @@ class DQNAgent(Agent):
             q_vals[i] = q_phi[i, actions[i]]
 
         loss = self.loss(q_vals, y.float())
+        return_loss = loss.detach().item()
         loss.backward()
         self.optimizer.step()
-        return loss
+        return return_loss
 
     def play_and_store_transition(self, observation):
         at = self.action(observation)
