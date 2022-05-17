@@ -1,7 +1,6 @@
 import numpy as np
 import torch
 import torch.nn.functional as F
-import torch.optim as optim
 import os
 import pickle
 import time
@@ -11,8 +10,6 @@ import matplotlib.pyplot as plt
 from dqn.memory.distillation_replay_memory import DistillationReplayMemory as Memory
 from dqn.agents.agent import Agent
 from dqn.policies.e_greedy import EGreedy
-from dqn.environments.atari_dqn_env import AtariDQNEnv
-from yaaf.environments.wrappers import NvidiaAtari2600Wrapper
 from torch.nn.functional import softmax
 
 
@@ -80,7 +77,8 @@ class MultiDistilledAgent(Agent):
         self.teachers = teachers
         # turn on eval mode for each teacher
         for teacher in teachers:
-            teacher.eval()
+            if teacher is not None:
+                teacher.eval()
 
     # ================================================================================================================
     # Agent Methods
@@ -258,6 +256,7 @@ class MultiDistilledAgent(Agent):
     def load(cls, envs, teachers, agent_dir, net_type, loss=lambda x, y: F.kl_div(x, y, reduction='sum'),
              import_replay=True, optimizer=torch.optim.RMSprop,
              device=("cuda" if torch.cuda.is_available() else "cpu"), replay_type=Memory, replay_size=10 * 216_000):
+        """The teachers can be a list of None, if there is no intention of training the agent any longer"""
         agent_dir = agent_dir if (agent_dir[-1] == '/' or agent_dir[-1] == '\\') else agent_dir + '/'
         checkpoint = torch.load(agent_dir + "agent.tar", map_location=device)
         if checkpoint["n_tasks"] != len(envs) or len(envs) != len(teachers):

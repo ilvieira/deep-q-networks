@@ -37,3 +37,4 @@ The easiest way to make sure this package is properly installed is to create a n
  - 0.4.7 - Bugfix: in the previous version there was a mistake that made it so that the plots stored for the loss were wrong.
  
  - 1.0.0 - Multitask distillation added to the library.
+ - 1.0.1 - A MultiDistilledAgent can be loaded without the teachers, by initializing that parameter with a list containing only instances of None.
