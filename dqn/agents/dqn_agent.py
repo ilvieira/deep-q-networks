@@ -483,7 +483,7 @@ class DQNAtariAgent(DQNAgent):
         env = AtariDQNEnv(env)
         optimizer_parameters = optimizer_parameters if optimizer_parameters is not None \
             else {"lr": 0.00025, "alpha": 0.95, "eps": 0.01}
-        super().__init__(env, replay, env.action_space.n, DQNetwork, {"number_of_actions":env.action_space.n},
+        super().__init__(env, replay, env.action_space.n, DQNetwork, {"number_of_actions": env.action_space.n},
                          minibatch_size=minibatch_size,
                          C=C,
                          gamma=gamma,

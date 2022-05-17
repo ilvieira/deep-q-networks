@@ -35,3 +35,5 @@ The easiest way to make sure this package is properly installed is to create a n
  - 0.4.5 - The number of eval episodes and time between eval stages can now be manually set for DQN and DoubleDQN with atari games.
  - 0.4.6 - Plots for the loss are now stored.
  - 0.4.7 - Bugfix: in the previous version there was a mistake that made it so that the plots stored for the loss were wrong.
+ 
+ - 1.0.0 - Multitask distillation added to the library.

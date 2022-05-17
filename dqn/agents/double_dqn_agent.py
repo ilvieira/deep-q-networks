@@ -16,11 +16,13 @@ class DoubleDQNAgent(DQNAgent):
                  populate_policy=None,
                  seed=0,
                  device="cuda" if torch.cuda.is_available() else "cpu",
-                 optimizer_parameters=None):
+                 optimizer_parameters=None,
+                 avg_loss_per_steps=10_000):
         super().__init__(env, replay, n_actions, net_type, net_parameters, minibatch_size=minibatch_size,
                          optimizer=optimizer, C=C, update_frequency=update_frequency, gamma=gamma, loss=loss,
                          policy=policy, populate_policy=populate_policy, seed=seed,
-                         device=device, optimizer_parameters=optimizer_parameters)
+                         device=device, optimizer_parameters=optimizer_parameters,
+                         avg_loss_per_steps=avg_loss_per_steps)
 
     def update_net(self, r, not_done, next_phi):
         with torch.no_grad():

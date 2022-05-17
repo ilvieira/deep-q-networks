@@ -87,8 +87,6 @@ class DQNReplayMemoryAtari(ReplayMemory):
             # prev_phi <- (x0,x1,x2,x3), next_phi <- (x1,x2,x3,x4)
             i = rnd.randint(4, len(self)-4)
 
-            #while not all([self._not_done[j] for j in range(i-4, i)]): # no longer valid.TODO:remove line after testing
-
             # While the transition is not valid, look for a new one
             while self._not_done[i] is None:
                 i = rnd.randint(4, len(self)-4)
